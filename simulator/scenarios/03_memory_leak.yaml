@@ -1,0 +1,100 @@
+id: "scenario-03-memory-leak"
+name: "JVM Memory Leak & GC Saturation"
+description: "Monotonic JVM heap growth in user-service triggers stop-the-world full GC pauses exceeding 2500ms and OutOfMemoryError."
+category: "RESOURCE_EXHAUSTION"
+
+topology:
+  - name: "api-gateway"
+    version: "v1.4"
+    dependencies: ["user-service"]
+    tier: "edge"
+    environment: "production"
+  - name: "user-service"
+    version: "v2.1"
+    dependencies: []
+    tier: "backend"
+    environment: "production"
+
+baseline_phase:
+  name: "Stable JVM State"
+  duration_seconds: 60
+  request_rate: 100.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 15.0
+  p95_latency_ms: 40.0
+  p99_latency_ms: 60.0
+  cpu_percent: 25.0
+  memory_percent: 52.0
+  custom_metrics:
+    - name: "jvm.gc.pause.duration"
+      type: "GAUGE"
+      value: 12.0
+    - name: "jvm.memory.heap.committed"
+      type: "GAUGE"
+      value: 2048.0
+  logs: []
+  traces: []
+
+fault_phase:
+  name: "Heap Exhaustion & Full GC Pauses"
+  duration_seconds: 90
+  request_rate: 110.0
+  error_rate_percent: 35.0
+  p50_latency_ms: 450.0
+  p95_latency_ms: 2200.0
+  p99_latency_ms: 3800.0
+  cpu_percent: 98.0
+  memory_percent: 97.5
+  custom_metrics:
+    - name: "jvm.gc.pause.duration"
+      type: "GAUGE"
+      value: 2850.0
+    - name: "jvm.memory.heap.committed"
+      type: "GAUGE"
+      value: 4096.0
+  logs:
+    - severity: "ERROR"
+      pattern: "java.lang.OutOfMemoryError: Java heap space"
+      count: 12
+      attributes:
+        exception.type: "java.lang.OutOfMemoryError"
+    - severity: "WARN"
+      pattern: "G1 Evacuation Pause took 2750ms. High GC overhead detected."
+      count: 8
+      attributes:
+        gc.type: "Full GC"
+    - severity: "ERROR"
+      pattern: "[user-service] Health check failed: JVM heap allocation threshold 95% exceeded"
+      count: 6
+  traces: []
+
+recovery_phase:
+  name: "Pod Restarted with Memory Patch"
+  duration_seconds: 60
+  request_rate: 100.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 16.0
+  p95_latency_ms: 42.0
+  p99_latency_ms: 65.0
+  cpu_percent: 28.0
+  memory_percent: 54.0
+  custom_metrics:
+    - name: "jvm.gc.pause.duration"
+      type: "GAUGE"
+      value: 14.0
+  logs: []
+  traces: []
+
+ground_truth:
+  expected_incident: true
+  expected_severity: "SEV1"
+  root_service: "user-service"
+  root_cause_category: "RESOURCE_EXHAUSTION"
+  blast_radius_services:
+    - "user-service"
+    - "api-gateway"
+  expected_hypotheses:
+    - "JVM OutOfMemoryError and GC pause saturation"
+    - "Memory leak in user session cache"
+  min_confidence: 0.70
+  explanation: "User-service suffered continuous Full GC thrashing and OutOfMemoryError, driving p99 latency to 3800ms and 35% error rate."

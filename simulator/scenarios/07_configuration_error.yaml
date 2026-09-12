@@ -1,0 +1,96 @@
+id: "scenario-07-configuration-error"
+name: "Configuration Error & Invalid Provider Credentials"
+description: "A bad configuration deployment pushes malformed API credentials to notification-service, resulting in immediate 100% provider authentication rejections."
+category: "CONFIGURATION_ERROR"
+
+topology:
+  - name: "order-service"
+    version: "v3.0"
+    dependencies: ["notification-service"]
+    tier: "backend"
+    environment: "production"
+  - name: "notification-service"
+    version: "v1.2"
+    dependencies: []
+    tier: "worker"
+    environment: "production"
+
+config_change:
+  service: "notification-service"
+  key: "provider.credentials.secret_key"
+  old_value: "sec_prod_valid_token_77a"
+  new_value: "sec_prod_corrupted_key_NULL"
+  offset_seconds: -60
+
+baseline_phase:
+  name: "Healthy Notification Dispatch"
+  duration_seconds: 60
+  request_rate: 80.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 30.0
+  p95_latency_ms: 75.0
+  p99_latency_ms: 110.0
+  cpu_percent: 22.0
+  memory_percent: 36.0
+  custom_metrics:
+    - name: "notifications.delivered"
+      type: "COUNTER"
+      value: 4800.0
+  logs: []
+  traces: []
+
+fault_phase:
+  name: "Bad Config Ingested & Authentication Rejected"
+  duration_seconds: 90
+  request_rate: 85.0
+  error_rate_percent: 88.0
+  p50_latency_ms: 180.0
+  p95_latency_ms: 520.0
+  p99_latency_ms: 850.0
+  cpu_percent: 24.0
+  memory_percent: 38.0
+  custom_metrics:
+    - name: "notifications.delivery_failed"
+      type: "COUNTER"
+      value: 7480.0
+  logs:
+    - severity: "ERROR"
+      pattern: "com.twilio.exception.AuthenticationException: Authentication Error - invalid provider.credentials.secret_key"
+      count: 20
+      attributes:
+        exception.type: "AuthenticationException"
+        config.key: "provider.credentials.secret_key"
+    - severity: "ERROR"
+      pattern: "[notification-service] Failed to authenticate with SMS gateway using updated credentials"
+      count: 15
+    - severity: "ERROR"
+      pattern: "HTTP 401 Unauthorized received from upstream notification gateway"
+      count: 25
+  traces: []
+
+recovery_phase:
+  name: "Configuration Rollback"
+  duration_seconds: 60
+  request_rate: 80.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 32.0
+  p95_latency_ms: 78.0
+  p99_latency_ms: 115.0
+  cpu_percent: 22.0
+  memory_percent: 36.0
+  custom_metrics: []
+  logs: []
+  traces: []
+
+ground_truth:
+  expected_incident: true
+  expected_severity: "SEV2"
+  root_service: "notification-service"
+  root_cause_category: "CONFIGURATION_ERROR"
+  blast_radius_services:
+    - "notification-service"
+  expected_hypotheses:
+    - "Configuration error: invalid API credentials in notification-service"
+    - "Provider authentication failure"
+  min_confidence: 0.70
+  explanation: "Invalid provider.credentials.secret_key configuration change broke authentication with third-party gateway in notification-service."

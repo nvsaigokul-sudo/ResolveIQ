@@ -1,0 +1,91 @@
+id: "scenario-10-third-party-api-failure"
+name: "Third-Party External Payment API Outage"
+description: "External credit card processor returns HTTP 502 Bad Gateway and 429 Too Many Requests, causing payment transaction failures in payment-service."
+category: "THIRD_PARTY_DEPENDENCY"
+
+topology:
+  - name: "order-service"
+    version: "v3.0"
+    dependencies: ["payment-service"]
+    tier: "backend"
+    environment: "production"
+  - name: "payment-service"
+    version: "v2.8"
+    dependencies: []
+    tier: "backend"
+    environment: "production"
+
+baseline_phase:
+  name: "Nominal Third-Party Ingestion"
+  duration_seconds: 60
+  request_rate: 90.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 120.0
+  p95_latency_ms: 280.0
+  p99_latency_ms: 450.0
+  cpu_percent: 26.0
+  memory_percent: 42.0
+  custom_metrics:
+    - name: "payment.gateway.success"
+      type: "COUNTER"
+      value: 5400.0
+  logs: []
+  traces: []
+
+fault_phase:
+  name: "External Gateway 502 Bad Gateway"
+  duration_seconds: 90
+  request_rate: 95.0
+  error_rate_percent: 64.0
+  p50_latency_ms: 450.0
+  p95_latency_ms: 1800.0
+  p99_latency_ms: 3200.0
+  cpu_percent: 32.0
+  memory_percent: 46.0
+  custom_metrics:
+    - name: "payment.gateway.502_errors"
+      type: "COUNTER"
+      value: 5472.0
+  logs:
+    - severity: "ERROR"
+      pattern: "com.stripe.exception.ApiConnectionException: HTTP 502 Bad Gateway received from https://api.stripe.com/v1/charges"
+      count: 24
+      attributes:
+        exception.type: "ApiConnectionException"
+        external.host: "api.stripe.com"
+        http.status_code: 502
+    - severity: "ERROR"
+      pattern: "[payment-service] Upstream payment gateway unavailable: circuit breaker OPEN"
+      count: 16
+    - severity: "WARN"
+      pattern: "[payment-service] Retrying failed payment charge with exponential backoff"
+      count: 32
+  traces: []
+
+recovery_phase:
+  name: "External Gateway Restored"
+  duration_seconds: 60
+  request_rate: 90.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 125.0
+  p95_latency_ms: 290.0
+  p99_latency_ms: 460.0
+  cpu_percent: 28.0
+  memory_percent: 44.0
+  custom_metrics: []
+  logs: []
+  traces: []
+
+ground_truth:
+  expected_incident: true
+  expected_severity: "SEV1"
+  root_service: "payment-service"
+  root_cause_category: "THIRD_PARTY_DEPENDENCY"
+  blast_radius_services:
+    - "payment-service"
+    - "order-service"
+  expected_hypotheses:
+    - "Third-party payment processor API outage (HTTP 502 Bad Gateway)"
+    - "External gateway rate limit exhaustion"
+  min_confidence: 0.70
+  explanation: "External payment gateway returned widespread 502 Bad Gateway errors, tripping payment-service circuit breakers."

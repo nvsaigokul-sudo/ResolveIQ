@@ -1,0 +1,82 @@
+id: "scenario-06-legitimate-traffic-spike"
+name: "Legitimate Traffic Surge (False Positive Benchmark)"
+description: "A 300% legitimate marketing traffic surge occurs. CPU rises moderately but error rate remains 0.0% and latencies remain strictly within SLA. MUST NOT CREATE AN INCIDENT."
+category: "BENIGN_TRAFFIC_SURGE"
+
+topology:
+  - name: "api-gateway"
+    version: "v1.4"
+    dependencies: ["order-service"]
+    tier: "edge"
+    environment: "production"
+  - name: "order-service"
+    version: "v3.0"
+    dependencies: []
+    tier: "backend"
+    environment: "production"
+
+baseline_phase:
+  name: "Standard Daytime Traffic"
+  duration_seconds: 60
+  request_rate: 100.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 15.0
+  p95_latency_ms: 45.0
+  p99_latency_ms: 70.0
+  cpu_percent: 28.0
+  memory_percent: 45.0
+  custom_metrics:
+    - name: "http.requests.total"
+      type: "COUNTER"
+      value: 6000.0
+  logs: []
+  traces: []
+
+fault_phase:
+  name: "300% Flash Sale Traffic Surge"
+  duration_seconds: 120
+  request_rate: 450.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 28.0
+  p95_latency_ms: 68.0
+  p99_latency_ms: 110.0
+  cpu_percent: 74.0
+  memory_percent: 62.0
+  custom_metrics:
+    - name: "http.requests.total"
+      type: "COUNTER"
+      value: 54000.0
+  logs:
+    - severity: "INFO"
+      pattern: "[api-gateway] Handling seasonal promotional campaign flash sale traffic"
+      count: 20
+      attributes:
+        campaign: "flash_sale_summer"
+    - severity: "INFO"
+      pattern: "[order-service] Successfully processed customer checkout order"
+      count: 50
+  traces: []
+
+recovery_phase:
+  name: "Traffic Normalized"
+  duration_seconds: 60
+  request_rate: 120.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 16.0
+  p95_latency_ms: 48.0
+  p99_latency_ms: 72.0
+  cpu_percent: 30.0
+  memory_percent: 46.0
+  custom_metrics: []
+  logs: []
+  traces: []
+
+ground_truth:
+  expected_incident: false
+  expected_severity: null
+  root_service: null
+  root_cause_category: null
+  blast_radius_services: []
+  expected_hypotheses: []
+  min_confidence: 0.0
+  explanation: "Benign 300% traffic surge with 0.0% error rate and latencies within SLA bounds. Must create 0 false-positive incidents."

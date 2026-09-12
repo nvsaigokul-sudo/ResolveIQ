@@ -1,0 +1,112 @@
+id: "scenario-02-database-latency-spike"
+name: "Database Latency Spike & Lock Contention"
+description: "Unindexed sequential scan query and lock contention on orders database causes p99 latency spike to 4500ms and thread backlog in order-service."
+category: "DATABASE_SATURATION"
+
+topology:
+  - name: "api-gateway"
+    version: "v1.4"
+    dependencies: ["order-service"]
+    tier: "edge"
+    environment: "production"
+  - name: "order-service"
+    version: "v3.0"
+    dependencies: ["inventory-service"]
+    tier: "backend"
+    environment: "production"
+  - name: "inventory-service"
+    version: "v1.9"
+    dependencies: []
+    tier: "backend"
+    environment: "production"
+
+baseline_phase:
+  name: "Nominal DB Latency"
+  duration_seconds: 60
+  request_rate: 120.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 18.0
+  p95_latency_ms: 45.0
+  p99_latency_ms: 75.0
+  cpu_percent: 32.0
+  memory_percent: 48.0
+  custom_metrics:
+    - name: "db.query.duration"
+      type: "HISTOGRAM"
+      value: 12.0
+      labels:
+        query: "SELECT orders"
+    - name: "db.locks.waiting"
+      type: "GAUGE"
+      value: 0.0
+  logs: []
+  traces: []
+
+fault_phase:
+  name: "Database Lock & Slow Query Contention"
+  duration_seconds: 90
+  request_rate: 130.0
+  error_rate_percent: 28.0
+  p50_latency_ms: 850.0
+  p95_latency_ms: 3200.0
+  p99_latency_ms: 4800.0
+  cpu_percent: 92.0
+  memory_percent: 74.0
+  custom_metrics:
+    - name: "db.query.duration"
+      type: "HISTOGRAM"
+      value: 4200.0
+      labels:
+        query: "SELECT orders WHERE status = 'PENDING'"
+    - name: "db.locks.waiting"
+      type: "GAUGE"
+      value: 65.0
+  logs:
+    - severity: "WARN"
+      pattern: "org.postgresql.util.PSQLException: Query execution time 4320ms exceeded slow_query_threshold (1000ms)"
+      count: 10
+      attributes:
+        db.statement: "SELECT * FROM orders WHERE customer_id = $1 AND status = 'PENDING'"
+    - severity: "ERROR"
+      pattern: "org.postgresql.util.PSQLException: ERROR: canceling statement due to statement timeout"
+      count: 14
+      attributes:
+        exception.type: "org.postgresql.util.PSQLException"
+    - severity: "ERROR"
+      pattern: "[order-service] Database read lock timeout on orders table partition"
+      count: 8
+  traces: []
+
+recovery_phase:
+  name: "Index Added & Lock Cleared"
+  duration_seconds: 60
+  request_rate: 120.0
+  error_rate_percent: 0.0
+  p50_latency_ms: 20.0
+  p95_latency_ms: 48.0
+  p99_latency_ms: 80.0
+  cpu_percent: 34.0
+  memory_percent: 50.0
+  custom_metrics:
+    - name: "db.query.duration"
+      type: "HISTOGRAM"
+      value: 14.0
+    - name: "db.locks.waiting"
+      type: "GAUGE"
+      value: 0.0
+  logs: []
+  traces: []
+
+ground_truth:
+  expected_incident: true
+  expected_severity: "SEV1"
+  root_service: "order-service"
+  root_cause_category: "DATABASE_SATURATION"
+  blast_radius_services:
+    - "order-service"
+    - "api-gateway"
+  expected_hypotheses:
+    - "Database slow query and lock contention on orders table"
+    - "PostgreSQL statement timeout"
+  min_confidence: 0.70
+  explanation: "Order-service experienced severe database statement timeouts and lock contention resulting in p99 latency > 4500ms."
