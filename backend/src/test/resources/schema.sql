@@ -263,3 +263,50 @@ CREATE TABLE IF NOT EXISTS deployments (
     metadata TEXT
 );
 
+CREATE TABLE IF NOT EXISTS notification_channels (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    channel_type VARCHAR(32) NOT NULL,
+    destination VARCHAR(1024) NOT NULL,
+    secret_token VARCHAR(255),
+    min_severity VARCHAR(32) NOT NULL DEFAULT 'SEV3',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    incident_id UUID REFERENCES incidents(id) ON DELETE CASCADE,
+    channel_id UUID REFERENCES notification_channels(id) ON DELETE SET NULL,
+    channel_type VARCHAR(32) NOT NULL,
+    destination VARCHAR(1024) NOT NULL,
+    event_type VARCHAR(64) NOT NULL,
+    idempotency_key VARCHAR(255) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    attempt_count INT NOT NULL DEFAULT 0,
+    max_attempts INT NOT NULL DEFAULT 3,
+    next_retry_at TIMESTAMP WITH TIME ZONE,
+    payload TEXT,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    delivered_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS code_repositories (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    provider VARCHAR(32) NOT NULL,
+    repo_name VARCHAR(255) NOT NULL,
+    repo_url VARCHAR(512) NOT NULL,
+    access_token TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT uq_code_repos_tenant_repo UNIQUE (tenant_id, provider, repo_name)
+);
+
+

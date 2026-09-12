@@ -103,6 +103,14 @@ public enum Role {
         return hasPermission("knowledge:read");
     }
 
+    public boolean canManageNotifications() {
+        return hasPermission("integrations:manage") || hasPermission("incidents:manage");
+    }
+
+    public boolean canManageIntegrations() {
+        return hasPermission("integrations:manage");
+    }
+
     public boolean isReadOnly() {
         return this == VIEWER;
     }

@@ -109,6 +109,15 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("RESOURCE_NOT_FOUND", ex.getMessage(), traceId, ex.getDetails()));
     }
 
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(org.springframework.web.servlet.resource.NoResourceFoundException ex,
+                                                               HttpServletRequest request,
+                                                               HttpServletResponse response) {
+        String traceId = getTraceId(request, response);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("RESOURCE_NOT_FOUND", ex.getMessage(), traceId));
+    }
+
     @ExceptionHandler(InvalidLifecycleTransitionException.class)
     public ResponseEntity<ErrorResponse> handleInvalidLifecycleTransition(InvalidLifecycleTransitionException ex,
                                                                            HttpServletRequest request,

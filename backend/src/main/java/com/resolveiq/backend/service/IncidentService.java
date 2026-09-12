@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resolveiq.backend.domain.*;
 import com.resolveiq.backend.kafka.IncidentKafkaProducer;
+import com.resolveiq.backend.notifications.service.NotificationService;
 import com.resolveiq.backend.repository.*;
 import com.resolveiq.common.correlation.CorrelatedIncidentPayload;
 import com.resolveiq.common.exception.ResourceNotFoundException;
@@ -45,6 +46,7 @@ public class IncidentService {
     private final AuditLogService auditLogService;
     private final IncidentKafkaProducer incidentKafkaProducer;
     private final EvidenceSanitizer evidenceSanitizer;
+    private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
 
     public IncidentService(IncidentRepository incidentRepository,
@@ -58,6 +60,7 @@ public class IncidentService {
                            AuditLogService auditLogService,
                            IncidentKafkaProducer incidentKafkaProducer,
                            EvidenceSanitizer evidenceSanitizer,
+                           @org.springframework.context.annotation.Lazy NotificationService notificationService,
                            ObjectMapper objectMapper) {
         this.incidentRepository = incidentRepository;
         this.incidentEventRepository = incidentEventRepository;
@@ -70,6 +73,7 @@ public class IncidentService {
         this.auditLogService = auditLogService;
         this.incidentKafkaProducer = incidentKafkaProducer;
         this.evidenceSanitizer = evidenceSanitizer;
+        this.notificationService = notificationService;
         this.objectMapper = objectMapper;
     }
 
@@ -107,6 +111,13 @@ public class IncidentService {
                         String.format("Severity escalated from %s to %s due to higher severity breach.", oldSev, payloadSev),
                         String.format("{\"oldSeverity\": \"%s\", \"newSeverity\": \"%s\"}", oldSev, payloadSev),
                         null);
+
+                notificationService.notifyIncidentEvent(
+                        tenantId, existing.getId(), "SEVERITY_ESCALATED",
+                        existing.getTitle(),
+                        String.format("Severity escalated to %s due to higher severity breach.", payloadSev),
+                        payloadSev, existing.getRootService(), existing.getStatus().name()
+                );
             }
 
             // B. Merge affected services
@@ -214,6 +225,14 @@ public class IncidentService {
         // 8. Publish IncidentCreated Kafka event
         publishIncidentEvent(saved, true);
 
+        // 9. Dispatch notifications
+        notificationService.notifyIncidentEvent(
+                tenantId, saved.getId(), "INCIDENT_DETECTED",
+                saved.getTitle(),
+                String.format("[%s] Incident detected in %s.", saved.getSeverity(), saved.getRootService()),
+                saved.getSeverity(), saved.getRootService(), saved.getStatus().name()
+        );
+
         return saved;
     }
 
@@ -259,6 +278,14 @@ public class IncidentService {
 
         // Publish IncidentUpdated Kafka event
         publishIncidentEvent(updated, false);
+
+        // Dispatch status changed notification
+        notificationService.notifyIncidentEvent(
+                tenantId, incidentId, "STATUS_CHANGED",
+                updated.getTitle(),
+                summary,
+                updated.getSeverity(), updated.getRootService(), targetStatus.name()
+        );
 
         return updated;
     }
