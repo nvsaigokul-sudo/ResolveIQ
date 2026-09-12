@@ -31,9 +31,11 @@
   - [Security Architecture Visual](#security-architecture-visual)
   - [Core Security Invariants](#core-security-invariants)
 - [7. Incident Intelligence Pipeline](#7-incident-intelligence-pipeline)
+  - [Telemetry Ingestion & Stream Processing Flow](#telemetry-ingestion--stream-processing-flow)
   - [Deterministic Anomaly Detection](#deterministic-anomaly-detection)
   - [Dynamic Topology & Multi-Signal Correlation](#dynamic-topology--multi-signal-correlation)
-  - [Evidence Builder Service](#evidence-builder-service)
+  - [Evidence Builder Service & Incident Assembly](#evidence-builder-service--incident-assembly)
+  - [Multi-Channel Notification Pipeline & Webhook Security](#multi-channel-notification-pipeline--webhook-security)
 - [8. AI Investigation Architecture](#8-ai-investigation-architecture)
   - [Spring AI Integration & Tool Registry](#spring-ai-integration--tool-registry)
   - [Investigation Loop & Safeguards](#investigation-loop--safeguards)
@@ -101,86 +103,159 @@ flowchart LR
 
 ## 3. How ResolveIQ Works
 
-The diagram below outlines the flow of control and data through ResolveIQ:
+The diagram below illustrates the architectural journey through ResolveIQ, showing clear boundaries between user identity, presentation, security context, application APIs, deterministic intelligence, bounded AI investigation, and operational resolution:
 
 ```mermaid
-flowchart TD
-    Users["1. Platform Users<br/>(Internal SRE Operators & Enterprise Customers)"]
-    --> Auth["2. Authentication & Authorization Gate<br/>(Stateless JWT / RBAC / PostgreSQL RLS / TenantContext)"]
-    --> Telemetry["3. Distributed Systems Telemetry<br/>(OpenTelemetry OTLP Metrics, Logs & Traces)"]
-    --> Ingestion["4. Edge Ingestion & Sanitization<br/>(Token-Bucket Rate Limiter / PII Redaction / Kafka Transport)"]
-    --> Detection["5. Deterministic Detection Engine<br/>(EWMA Statistical Baselines & 3-Sigma Rule Detectors)"]
-    --> Correlation["6. Multi-Signal Correlation Engine<br/>(8 Operational Signals: Topology, Time, Traces, Deployments)"]
-    --> DepGraph["7. Dynamic Dependency Graph<br/>(Runtime Microservice Topology & Blast Radius Analysis)"]
-    --> Evidence["8. Deterministic Evidence Builder<br/>(Immutable Evidence Bundles: Metrics, Logs, Spans, Diffs)"]
-    --> AiAgent["9. Bounded AI Investigation Agent<br/>(Spring AI Framework / 11 Strongly Typed Read-Only Tools)"]
-    --> Rag["10. Historical Intelligence & RAG<br/>(Tenant-Isolated pgvector 384-dim Cosine & BM25 Lexical)"]
-    --> Rca["11. Structured Root Cause Analysis<br/>(Ranked Hypotheses, Bayesian Confidence, Counter-Evidence)"]
-    --> Action["12. Human Verification & Operations<br/>(SRE Verification Modal / Incident Dashboard / Slack & Email Alerts)"]
+flowchart TB
+    subgraph LayerUsers["1. User & Operator Identities"]
+        direction LR
+        Cust["Enterprise Customers<br/>(Passwordless OTP)"]
+        SRE["Internal SRE Operators<br/>(Staff SSO / Operator Auth)"]
+    end
+
+    subgraph LayerFrontend["2. Presentation Layer (Next.js 14 Mission Control)"]
+        direction LR
+        CustUI["Tenant Mission Control<br/>(/incidents, /services, /metrics)"]
+        AdminUI["Platform Admin Console<br/>(/admin/registrations, /audit)"]
+    end
+
+    subgraph LayerSecurity["3. Identity & Security Boundary (Spring Security 6)"]
+        direction TB
+        JwtFilter["Stateless JWT Authentication<br/>(TenantAuthenticationFilter)"]
+        RbacGate["Method-Level RBAC Gate<br/>(@PreAuthorize Roles)"]
+        TenantCtx["TenantContextHolder<br/>(ThreadLocal tenant_id, role)"]
+        RlsSession["PostgreSQL RLS Session Hook<br/>SET LOCAL app.tenant_id = ?"]
+        JwtFilter --> RbacGate --> TenantCtx --> RlsSession
+    end
+
+    subgraph LayerApis["4. Core Application APIs (Spring Boot Monolith)"]
+        direction LR
+        ApiInc["Incident APIs<br/>(/api/v1/incidents)"]
+        ApiEvid["Evidence APIs<br/>(/api/v1/evidence)"]
+        ApiKnow["Knowledge APIs<br/>(/api/v1/knowledge)"]
+    end
+
+    subgraph LayerIntelligence["5. Core Intelligence Engine (Deterministic - Zero LLM)"]
+        direction TB
+        subgraph PipelineStream["Deterministic Pipeline"]
+            direction LR
+            DetEng["Detection Engine<br/>(EWMA / 3-Sigma / DoD)"]
+            GraphEng["Dependency Graph<br/>(Trace DAG & Blast Radius)"]
+            CorrEng["Correlation Engine<br/>(8 Weighted Signals)"]
+            DetEng --> CorrEng
+            GraphEng --> CorrEng
+        end
+        IncCreated["Correlated Incident Formed<br/>(State: DETECTED)"]
+        CorrEng --> IncCreated
+    end
+
+    subgraph LayerAi["6. AI Investigation & RAG (Spring AI 1.0.0-M1)"]
+        direction TB
+        EvidBuilder["Evidence Builder Service<br/>(Persist Immutable System State)"]
+        AiLoop["Spring AI Investigation Loop<br/>(Bounded Agent / Max 12 Calls)"]
+        ToolUniverse["11 Read-Only Tools<br/>(Metrics, Logs, Traces, Diffs, Graph)"]
+        RagEngine["Tenant-Isolated Hybrid RAG<br/>(pgvector Cosine + BM25)"]
+        RcaOutput["Structured RCA Output<br/>(Ranked Hypotheses & Evidence IDs)"]
+
+        EvidBuilder --> AiLoop
+        AiLoop <--> ToolUniverse
+        AiLoop <--> RagEngine
+        AiLoop --> RcaOutput
+    end
+
+    subgraph LayerAction["7. Human Verification & Operational Closure"]
+        direction LR
+        HumanVerif["Human SRE Verification<br/>(VERIFIED / REJECTED / NEEDS_MORE)"]
+        NotifDispatch["Multi-Channel Notifications<br/>(Slack, Email, Secure Webhook)"]
+        LifecycleClosure["Incident Resolution<br/>(MITIGATING -> MONITORING -> RESOLVED)"]
+        HumanVerif --> LifecycleClosure
+        HumanVerif --> NotifDispatch
+    end
+
+    Cust --> CustUI
+    SRE --> AdminUI
+    CustUI & AdminUI --> JwtFilter
+    RlsSession --> ApiInc & ApiEvid & ApiKnow
+    ApiInc --> LayerIntelligence
+    IncCreated --> EvidBuilder
+    RcaOutput --> HumanVerif
 ```
 
 ---
 
 ## 4. Complete End-to-End Incident Flow
 
-The following sequence details how an operational failure progresses from raw ingestion to resolution:
+The flagship architecture diagram below illustrates the comprehensive internal journey of data and control through ResolveIQ, connecting distributed telemetry ingestion, Kafka stream processing, dual storage, deterministic detection, topology correlation, evidence persistence, Spring AI bounded investigation, hybrid RAG, human verification, notifications, and closed-loop knowledge retention:
 
 ```mermaid
 flowchart TD
-    subgraph IngestionPhase["1. Ingestion & Edge Sanitization"]
-        T1["Microservices Emit OTel Data"] --> T2["Ingestion Service (Port 8081)"]
-        T2 --> T3{"Auth & Rate Limiting"}
-        T3 -- Passed --> T4["PII & Secret Redaction (Regex Engine)"]
-        T4 --> T5["Kafka Event Bus (Partition: tenant_id:service_id)"]
+    subgraph S1_Ingestion["1. Telemetry Ingestion & Edge Sanitization"]
+        direction TB
+        Sources["Telemetry Sources<br/>(Metrics, Logs, Distributed Traces)"] -->|"OTLP over gRPC :4317 / HTTP :4318"| OTLP["OTLP Receiver (Port 8081)<br/>(Ingestion Service Core)"]
+        OTLP --> PreFilter["Edge Ingestion Pipeline Guards<br/>1. Token-Bucket Rate Limiter (Per-tenant burst buffer)<br/>2. Tenant Identity (Argon2id Salted Key)<br/>3. PII & Secret Redaction (High-entropy regex)<br/>4. Idempotency & De-duplication Check"]
+        PreFilter --> KafkaProd["Kafka Producer<br/>(Partition Key: tenant_id:service_id)"]
     end
 
-    subgraph ProcessingPhase["2. Stream Processing & Rollups"]
-        T5 --> P1["Watermarked Stream Processors (60s Window)"]
-        P1 --> P2["TimescaleDB Hypertables (1m/5m/1h Aggregates)"]
-        P1 --> P3["OpenSearch (Log Clusters & Trace Spans)"]
+    subgraph S2_TransportStorage["2. Transport, Stream Processing & Dedicated Storage"]
+        direction TB
+        KafkaProd --> KafkaTopic["Apache Kafka Message Bus<br/>(telemetry.metrics, telemetry.logs, telemetry.traces)"]
+        KafkaTopic --> Consumers["Stream Processors (Watermarked 60s Tumbling Windows)"]
+        Consumers -->|"Aggregated Metric Points"| Timescale["TimescaleDB Hypertables<br/>(metrics_raw, 1m/5m/1h Continuous Aggregates)"]
+        Consumers -->|"Structured Logs & Spans"| OpenSearch["OpenSearch 2.11 Cluster<br/>(logs-index Hot/Cold ISM, traces-index)"]
     end
 
-    subgraph DetectionPhase["3. Deterministic Anomaly Detection"]
-        P2 --> D1["Rule Detectors: 5xx Rate, Latency p95/p99, Saturation"]
-        P2 --> D2["Stat Detectors: EWMA Baseline, 3-Sigma Bands, Drift"]
-        D1 & D2 --> D3{"Threshold Breach?"}
-        D3 -- Yes --> D4["Generate SHA-256 Fingerprint & Cooldown Check"]
-        D4 --> D5["Publish AnomalyDetected Event"]
+    subgraph S3_Detection["3. Deterministic Anomaly Detection (Zero LLM)"]
+        direction TB
+        Timescale --> DetEngine["Deterministic Detection Engine Matrix<br/>• Rule Detectors: 5xx Surge, Latency p95/p99 Breach, Saturation<br/>• Statistical Detectors: EWMA Baseline, Rolling 3-Sigma, DoD Drift"]
+        DetEngine --> AnomEval["Anomaly Evaluator & Severity Classifier"]
+        AnomEval --> Fingerprint["SHA-256 Fingerprinting & Dual-Threshold Hysteresis"]
+        Fingerprint --> AnomEvent["Published AnomalyDetected Event"]
     end
 
-    subgraph CorrelationPhase["4. Dynamic Topology & Correlation"]
-        D5 --> C1["Dynamic Trace DAG & Cycle Handler"]
-        C1 --> C2["Multi-Signal Correlation Engine (8 Weighted Signals)"]
-        C2 --> C3["Compute Blast Radius & Probable Root Node"]
-        C3 --> C4["Create Incident Record (State: DETECTED)"]
+    subgraph S4_Correlation["4. Dynamic Topology & Multi-Signal Correlation"]
+        direction TB
+        OpenSearch -->|"Trace Call Spans"| TopoGraph["Runtime Trace Dependency Graph<br/>(Tarjan Cycle Detection & Blast Radius Analysis)"]
+        AnomEvent & TopoGraph --> Correlator["Multi-Signal Correlation Engine<br/>(8 Weighted Signals: Topology, Time, Traces, Errors, Deploys)"]
+        Correlator --> IncidentFormed["Correlated Incident Formed<br/>(State: DETECTED | Root Origin Node Assigned)"]
     end
 
-    subgraph EvidencePhase["5. Evidence Assembly"]
-        C4 --> E1["Evidence Builder Service"]
-        E1 --> E2["Capture Metric Anomalies, Log Error Spikes & Trace Exemplars"]
-        E2 --> E3["Fetch Git Commit Diffs & Deployment Config Changes"]
-        E3 --> E4["Persist Evidence Entities to PostgreSQL"]
+    subgraph S5_Evidence["5. Deterministic Evidence Assembly"]
+        direction TB
+        IncidentFormed --> EvidBuilder["Evidence Builder Service"]
+        EvidBuilder --> EvidCollect["Harvest System Snapshot:<br/>• Metric Anomaly Windows (TimescaleDB)<br/>• Error Log Signatures & Exemplars (OpenSearch)<br/>• Git Commit Diffs & Deployment Configs (VCS API)"]
+        EvidCollect --> EvidSanitize["Evidence Sanitizer & Prompt Injection Defense<br/>(Wraps untrusted payloads in &lt;telemetry_data&gt; tags)"]
+        EvidSanitize --> EvidStore["PostgreSQL System of Record<br/>(Persist immutable evidence & candidate_evidence records)"]
     end
 
-    subgraph InvestigationPhase["6. AI Investigation & RAG"]
-        E4 --> I1["Trigger Investigation Agent (State: INVESTIGATING)"]
-        I1 --> I2["Spring AI Orchestration & Bounded Tool Loop"]
-        I2 --> I3["Query 11 Read-Only Tools (Metrics, Logs, Diffs, Graph)"]
-        I2 --> I4["Tenant-Isolated Hybrid RAG (pgvector Cosine + BM25)"]
-        I3 & I4 --> I5{"Sufficient Grounded Evidence?"}
-        I5 -- Yes --> I6["Synthesize Structured RCA (Ranked Hypotheses)"]
-        I5 -- No --> I7["Assert Uncertainty (insufficientEvidence = true)"]
+    subgraph S6_AIInvestigation["6. Bounded AI Investigation & Hybrid RAG (Spring AI)"]
+        direction TB
+        EvidStore --> InvAgent["Trigger AI Agent (State: INVESTIGATING)<br/>(Spring AI Orchestration Framework)"]
+        InvAgent --> AgentLoop["Bounded Investigation Loop<br/>(Max 12 Steps | 90s Timeout | 16k Context Budget)"]
+        AgentLoop <-->|"Query Telemetry"| ReadOnlyTools["11 Read-Only Tools Universe<br/>(Metrics, Logs, Traces, Topology, Diffs, Timeline)"]
+        AgentLoop <-->|"Retrieve Historical SOPs"| HybridRAG["Tenant-Isolated Hybrid RAG<br/>(pgvector 65% Cosine + BM25 35% Lexical Ranker)"]
+        AgentLoop --> GroundingCheck["Grounding & Certainty Validator<br/>(Require explicit evidence IDs; if ambiguous -> insufficientEvidence)"]
+        GroundingCheck --> StructuredRCA["Structured RCA Synthesized<br/>(Ranked Hypotheses, Bayesian Confidence, Mitigations)"]
     end
 
-    subgraph ActionPhase["7. Human Verification & Resolution"]
-        I6 & I7 --> A1["Advance Incident State: IDENTIFIED"]
-        A1 --> A2["Dispatch Multi-Channel Alerts (Slack Block Kit, Email, Webhooks)"]
-        A2 --> A3["SRE Reviews Incident on Next.js Mission Control"]
-        A3 --> A4["Human Verification (VERIFIED / REJECTED / NEEDS_MORE_EVIDENCE)"]
-        A4 --> A5["Remediation & Monitoring (State: MITIGATING -> MONITORING)"]
-        A5 --> A6["Incident Resolved & Closed (State: RESOLVED -> CLOSED)"]
-        A6 --> A7["Postmortem Ingested into pgvector for Future RAG"]
+    subgraph S7_ActionResolution["7. Human Verification, Alerting & Operational Closure"]
+        direction TB
+        StructuredRCA --> IncIdentified["Advance Incident State: IDENTIFIED"]
+        IncIdentified --> DispatchAlerts["Multi-Channel Alert Dispatch<br/>(Slack Block Kit, Email, Secure Webhook with HMAC-SHA256)"]
+        DispatchAlerts --> SREModal["Next.js SRE Mission Control UI<br/>(Human SRE Reviews Grounded Hypotheses & Evidence)"]
+        SREModal --> HumanDecision{"SRE Human Verification"}
+        HumanDecision -- "VERIFIED" --> Remediate["Remediation Action<br/>(State: MITIGATING -> MONITORING -> RESOLVED)"]
+        HumanDecision -- "REJECTED / INCONCLUSIVE" --> ReInvestigate["De-escalate / Request Additional Telemetry"]
+        Remediate --> ClosePostmortem["Incident CLOSED & Postmortem Generated"]
+        ClosePostmortem -->|"Ingest Vector Embeddings"| PGVectorStore["pgvector Knowledge Base<br/>(Embed Postmortem for Future RAG Retrieval)"]
     end
+
+    S1_Ingestion --> S2_TransportStorage
+    S2_TransportStorage --> S3_Detection
+    S3_Detection --> S4_Correlation
+    S4_Correlation --> S5_Evidence
+    S5_Evidence --> S6_AIInvestigation
+    S6_AIInvestigation --> S7_ActionResolution
+    PGVectorStore -.->|"Closes Knowledge Loop"| HybridRAG
 ```
 
 ---
@@ -193,31 +268,48 @@ ResolveIQ enforces a strict, multi-step customer access model separating custome
 
 ```mermaid
 flowchart TD
-    Customer["Customer Prospect"] --> Reg["1. Submit Registration (/api/v1/auth/register)"]
-    Reg --> State1["PENDING_EMAIL_VERIFICATION"]
-    State1 --> Email["2. Single-Use Verification Link Dispatched"]
-    Email --> VerifyClick["3. Customer Clicks Verification Link (/api/v1/auth/verify-email)"]
-    VerifyClick --> State2["EMAIL_VERIFIED"]
-    State2 --> State3["PENDING_ADMIN_REVIEW"]
-    
-    subgraph SecurityGate["CRITICAL SECURITY GATE"]
-        State3 -.-> GateInfo["EMAIL VERIFICATION DOES NOT GRANT ACCESS<br/>Zero JWT Issued | Protected APIs Return 401 Unauthorized"]
+    subgraph ClientLayer["1. Customer Registration Interface"]
+        Customer["Customer Prospect"] -->|"Submit Org & Email"| RegForm["Next.js Registration View (/register)"]
     end
-    
-    State3 --> AdminReview{"4. Internal Admin Review Queue"}
-    AdminReview -- "Reject with Reason" --> StateReject["REJECTED (Access Blocked)"]
-    AdminReview -- "Approve Application" --> ServerAssign["5. Server-Controlled Provisioning"]
-    
-    ServerAssign --> SetTenant["Server Assigns Target Tenant Organization (UUID)"]
-    SetTenant --> SetRole["Server Assigns RBAC Role (VIEWER, SRE, etc.)"]
-    SetRole --> ProvUser["Provision UserEntity in Target Tenant"]
-    ProvUser --> State4["APPROVED / ACTIVE"]
-    
-    State4 --> LoginOtp["6. Customer Signs In via Passwordless OTP"]
-    LoginOtp --> Dashboard["7. Scoped Access to Tenant Dashboard"]
 
-    State4 -. "Administrative Freeze" .-> StateSuspended["SUSPENDED (Access Blocked)"]
-    State4 -. "Decommission Org" .-> StateDeactivated["DEACTIVATED (Access Blocked)"]
+    subgraph ServiceLayer["2. Backend Registration Controller & Service"]
+        RegForm -->|"POST /api/v1/auth/register"| AuthCtrl["AuthController"]
+        AuthCtrl --> CustService["CustomerAuthService"]
+        CustService --> GenToken["Generate Secure Verification Token"]
+        GenToken --> HashToken["Compute SHA-256 Hash of Token"]
+    end
+
+    subgraph DBLayer["3. PostgreSQL Persistence (customer_registrations)"]
+        HashToken --> PersistReg[("Insert customer_registrations<br/>• status: PENDING_EMAIL_VERIFICATION<br/>• email_verification_token_hash: SHA-256<br/>• expires_at: now() + 24h")]
+    end
+
+    subgraph EmailVerification["4. Email Ownership Verification"]
+        PersistReg --> DispatchEmail["Dispatch Single-Use Verification Email Link"]
+        DispatchEmail --> CustClick["Customer Clicks Link (/verify-email?token=...)"]
+        CustClick -->|"POST /api/v1/auth/verify-email"| VerifyEndpoint["CustomerAuthService.verifyEmail()"]
+        VerifyEndpoint --> CheckToken{"Verify SHA-256 Hash & Expiry"}
+        CheckToken -- "Valid" --> MarkVerified[("Update customer_registrations<br/>• status: EMAIL_VERIFIED<br/>• Advance to: PENDING_ADMIN_REVIEW")]
+        CheckToken -- "Invalid / Expired" --> RejectEmail["Reject Verification (400 Bad Request)"]
+    end
+
+    subgraph SecurityGate["⛔ CRITICAL SECURITY GATE"]
+        MarkVerified -.-> GateRule["EMAIL VERIFICATION DOES NOT GRANT ACCESS<br/>• Zero JWT Access Tokens Issued<br/>• Protected APIs Return 401 Unauthorized<br/>• Requires Internal Administrator Approval"]
+    end
+
+    subgraph AdminWorkflow["5. Internal SRE Admin Review & Provisioning"]
+        GateRule --> AdminQueue["Admin Review Queue (/admin/registrations)"]
+        AdminUser["Internal SRE Operator (ADMIN/OWNER)"] -->|"GET /api/v1/admin/registrations"| AdminQueue
+        AdminQueue --> AdminDecision{"Administrator Decision"}
+
+        AdminDecision -- "Reject Application" --> AdminReject["POST /api/v1/admin/registrations/{id}/reject"]
+        AdminReject --> RegRejected[("Set status: REJECTED<br/>Write to audit_logs")]
+
+        AdminDecision -- "Approve Application" --> AdminApprove["POST /api/v1/admin/registrations/{id}/approve<br/>(Server assigns target tenant_id & role)"]
+        AdminApprove --> ProvisionUser[("Provision UserEntity in users table<br/>• tenant_id: Server-Selected UUID<br/>• role: Server-Assigned RBAC Role")]
+        ProvisionUser --> RegApproved[("Set customer_registrations status: APPROVED<br/>Write CUSTOMER_REGISTRATION_APPROVED to audit_logs")]
+    end
+
+    RegApproved --> CustEligible["Customer Eligible for Passwordless OTP Login"]
 ```
 
 > [!IMPORTANT]
@@ -228,38 +320,50 @@ flowchart TD
 
 ### Passwordless OTP Login Experience
 
-Customer accounts are **100% passwordless**. Sign-in is mediated entirely by single-use, cryptographically secure 6-digit one-time passcodes (OTPs).
+Customer accounts are **100% passwordless**. Sign-in is mediated entirely by single-use, cryptographically secure 6-digit one-time passcodes (OTPs) validated against database hashes.
 
 ```mermaid
 flowchart TD
-    Start["Customer Navigates to Sign In"] --> EnterEmail["1. Enter Registered Corporate Email"]
-    EnterEmail --> ServerValidate{"2. Validate Customer Status"}
-    
-    ServerValidate -- "Not Registered / REJECTED" --> Err1["Reject Request: Invalid Account (400)"]
-    ServerValidate -- "PENDING_EMAIL_VERIFICATION" --> Err2["Reject: Verify Email First (400)"]
-    ServerValidate -- "PENDING_ADMIN_REVIEW" --> Err3["Reject: Awaiting Administrator Review (400)"]
-    ServerValidate -- "SUSPENDED / DEACTIVATED" --> Err4["Reject: Account Frozen (400)"]
-    ServerValidate -- "Cooldown <60s" --> Err5["Reject: Wait Cooldown Period (400)"]
-    ServerValidate -- "Rate Limit >=5 in 15m" --> Err6["Reject: Rate Limit Exceeded (400)"]
-    
-    ServerValidate -- "APPROVED or ACTIVE" --> GenCode["3. Generate Secure 6-Digit Numeric OTP"]
-    GenCode --> HashCode["4. Store SHA-256 Hash (TTL = 5 mins, attempts = 0)"]
-    HashCode --> SendCode["5. Dispatch Code to Customer Email"]
-    SendCode --> EnterCode["6. Customer Submits 6-Digit Code"]
-    
-    EnterCode --> VerifyCode{"7. Compare SHA-256 Hashes"}
-    VerifyCode -- "Mismatch" --> IncAttempts["Increment Attempts (+1)"]
-    IncAttempts --> CheckLockout{"Attempts >= 5?"}
-    CheckLockout -- "Yes" --> Lockout["Invalidate OTP & Lockout Account (400)"]
-    CheckLockout -- "No" --> RetRemaining["Return Remaining Attempts Count (400)"]
-    
-    VerifyCode -- "Expired (>5 mins)" --> Expired["Invalidate OTP & Reject Expired Code (400)"]
-    
-    VerifyCode -- "Match" --> MarkConsumed["8. Mark OTP Consumed (Single-Use)"]
-    MarkConsumed --> TransActive["9. Advance Status from APPROVED -> ACTIVE"]
-    TransActive --> IssueJwt["10. Issue Cryptographic JWT (tenant_id, user_id, role)"]
-    IssueJwt --> AuditLog["11. Append CUSTOMER_LOGGED_IN_OTP to audit_logs"]
-    AuditLog --> Dashboard["12. Render Tenant-Isolated Mission Control"]
+    subgraph RequestOTP["1. Request One-Time Passcode (OTP)"]
+        CustLogin["Customer Navigates to /login"] -->|"Enter Corporate Email"| PostOtpReq["POST /api/v1/auth/otp/request"]
+        PostOtpReq --> AuthCtrlOtp["AuthController"]
+        AuthCtrlOtp --> CustAuthSvc["CustomerAuthService.requestOtp()"]
+        
+        CustAuthSvc --> ValidateCust{"Validate Customer State<br/>(customer_registrations)"}
+        ValidateCust -- "Not Found / REJECTED" --> ErrNotFound["Reject: Account Invalid (400)"]
+        ValidateCust -- "PENDING_EMAIL_VERIFICATION" --> ErrPendingEmail["Reject: Verify Email First (400)"]
+        ValidateCust -- "PENDING_ADMIN_REVIEW" --> ErrPendingReview["Reject: Awaiting Admin Approval (400)"]
+        ValidateCust -- "SUSPENDED / DEACTIVATED" --> ErrFrozen["Reject: Account Inactive (400)"]
+        ValidateCust -- "Cooldown &lt; 60s" --> ErrCooldown["Reject: Wait 60s Cooldown (400)"]
+        ValidateCust -- "Rate Limit &gt;= 5 in 15m" --> ErrRateLimit["Reject: Rate Limit Exceeded (400)"]
+
+        ValidateCust -- "APPROVED or ACTIVE" --> GenOtp["Generate 6-Digit Numeric OTP"]
+        GenOtp --> HashOtp["Compute SHA-256 Hash of OTP"]
+        HashOtp --> PersistOtp[("Insert auth_otps Table<br/>• otp_hash: SHA-256<br/>• attempts: 0<br/>• consumed: false<br/>• expires_at: now() + 5 mins")]
+        PersistOtp --> SendOtp["Dispatch 6-Digit OTP to Email"]
+    end
+
+    subgraph VerifyOTP["2. Verify OTP & Issue Scoped JWT"]
+        SendOtp --> EnterCode["Customer Submits 6-Digit Code"]
+        EnterCode -->|"POST /api/v1/auth/otp/verify"| PostVerifyOtp["CustomerAuthService.verifyOtp()"]
+        PostVerifyOtp --> QueryOtp[("Query Active OTP in auth_otps")]
+        
+        QueryOtp --> CheckExpiry{"Check Expiration (> 5m)?"}
+        CheckExpiry -- "Expired" --> MarkExpired["Reject: OTP Expired (400)"]
+
+        CheckExpiry -- "Active" --> CompareHash{"Compare SHA-256 Hashes"}
+        CompareHash -- "Mismatch" --> IncAttempts[("Increment attempts count (+1)")]
+        IncAttempts --> CheckLockout{"attempts &gt;= 5?"}
+        CheckLockout -- "Yes" --> Lockout["Invalidate OTP & Lockout (400)"]
+        CheckLockout -- "No" --> RetRemaining["Return Remaining Attempts (400)"]
+
+        CompareHash -- "Match" --> MarkConsumed[("Update auth_otps: consumed = true")]
+        MarkConsumed --> ActivateUser[("Update customer_registrations: status = ACTIVE")]
+        ActivateUser --> IssueJwt["Issue Stateless JWT Token<br/>• sub: customer email<br/>• tenant_id: assigned tenant UUID<br/>• role: assigned RBAC role<br/>• user_id: provisioned user UUID"]
+        IssueJwt --> WriteAudit[("Append CUSTOMER_LOGGED_IN_OTP<br/>to immutable audit_logs table")]
+        WriteAudit --> ClientContext["Frontend AuthContext Sets Session"]
+        ClientContext --> Dashboard["Render Scoped Tenant Mission Control"]
+    end
 ```
 
 ---
@@ -340,19 +444,57 @@ ResolveIQ applies defense-in-depth isolation across all operational layers (ADR-
 
 ```mermaid
 flowchart TD
-    Customer["Customer Prospect"]
-    --> VerToken["Single-Use Verification Link (SHA-256 Hashed Token in DB)"]
-    --> AdminGate["Internal Admin Review & Approval Gate"]
-    --> ServerAssign["Server-Controlled Tenant ID & RBAC Role Assignment"]
-    --> PasswordlessOtp["Passwordless 6-Digit OTP (5m TTL, 60s Cooldown, 5-Attempt Lockout)"]
-    --> JwtIssuance["Stateless Cryptographic JWT (Signed via JJWT HMAC-SHA256)"]
-    --> SpringSec["Spring Security Stateless Filter Chain (TenantAuthenticationFilter)"]
-    --> TamperProof["Tamper Guard: Client X-Tenant-Id Header Strictly Ignored"]
-    --> MethodSecurity["Spring Method-Level Security (@PreAuthorize RBAC Gate)"]
-    --> ContextHolder["ThreadLocal TenantContextHolder (tenant_id, user_id, role)"]
-    --> RlsSession["Connection Pool RLS Hook: set_config('app.tenant_id', ?, true)"]
-    --> PostgresRls["PostgreSQL Engine Row-Level Security Policy Enforcement"]
-    --> IsolatedData["Strictly Isolated Tenant Data (Zero Cross-Tenant Leakage)"]
+    subgraph ClientPerimeter["1. Client Ingress & Untrusted Header Defense"]
+        ClientReq["Inbound HTTP Request<br/>(Header: Authorization Bearer &lt;JWT&gt;)"]
+        UntrustedTenantHeader["Client Header: X-Tenant-Id<br/>❌ STRICTLY STRIPPED &amp; IGNORED (NOT TRUSTED)"]
+        ClientReq -.-> UntrustedTenantHeader
+    end
+
+    subgraph AuthPipeline["2. Spring Security Stateless Authentication"]
+        direction TB
+        AuthFilter["TenantAuthenticationFilter<br/>(Intercepts HTTP Request)"]
+        JwtValidation["JJWT Cryptographic Validation<br/>(Verifies HMAC-SHA256 Signature &amp; Expiry)"]
+        ExtractClaims["Extract Validated Claims<br/>• tenant_id: UUID<br/>• user_id: UUID<br/>• role: ROLE_SRE | ROLE_VIEWER"]
+        ContextInit["Initialize ThreadLocal TenantContextHolder<br/>(Sets execution context for current thread)"]
+        RbacCheck["Method-Level Security Gate<br/>(@PreAuthorize hasRole / hasAuthority)"]
+
+        ClientReq --> AuthFilter --> JwtValidation --> ExtractClaims --> ContextInit --> RbacCheck
+    end
+
+    subgraph RlsEnforcement["3. Database Connection Hook & Session Isolation"]
+        SessionHook["Connection Pool Session Hook<br/>SET LOCAL app.tenant_id = TenantContext.getTenantId()"]
+        RbacCheck --> SessionHook
+    end
+
+    subgraph MultiTenantRealms["4. Dual-Tenant PostgreSQL Engine Row-Level Security (RLS)"]
+        direction LR
+
+        subgraph RealmA["Tenant A Execution Boundary"]
+            direction TB
+            ReqA["Request for Tenant A<br/>(Claim: tenant_id = 1111)"]
+            CtxA["TenantContext: 1111"]
+            RlsA["PostgreSQL RLS Engine<br/>WHERE tenant_id = current_setting('app.tenant_id')"]
+            DataA[("Tenant A Data Rows<br/>(Incidents, Evidence, Metrics)")]
+            ReqA --> CtxA --> RlsA --> DataA
+        end
+
+        subgraph RealmB["Tenant B Execution Boundary"]
+            direction TB
+            ReqB["Request for Tenant B<br/>(Claim: tenant_id = 2222)"]
+            CtxB["TenantContext: 2222"]
+            RlsB["PostgreSQL RLS Engine<br/>WHERE tenant_id = current_setting('app.tenant_id')"]
+            DataB[("Tenant B Data Rows<br/>(Incidents, Evidence, Metrics)")]
+            ReqB --> CtxB --> RlsB --> DataB
+        end
+
+        SessionHook --> ReqA & ReqB
+    end
+
+    subgraph CrossTenantDefense["5. Cross-Tenant Breach Prevention"]
+        Attack["Cross-Tenant Leakage Attack<br/>(Tenant A query attempts to access tenant_id = 2222)"]
+        DataA -.-> Attack
+        Attack -- "❌ BLOCKED BY DATABASE ENGINE RLS<br/>(PostgreSQL returns 0 rows / Empty Result Set)" --> DataB
+    end
 ```
 
 ### Core Security Invariants
@@ -373,32 +515,194 @@ flowchart TD
 
 ## 7. Incident Intelligence Pipeline
 
+ResolveIQ's analytical pipeline is 100% deterministic, operating without runtime generative AI dependencies to detect anomalies, analyze topology, and correlate failures into active incidents.
+
+### Telemetry Ingestion & Stream Processing Flow
+
+Telemetry emitted by distributed services undergoes strict edge validation, tenant verification, and secret redaction before entering the Kafka event bus:
+
 ```mermaid
-flowchart LR
-    subgraph Detection["Deterministic Detection"]
-        Raw["OTel Metrics"] --> Detectors["Rule & Stat Detectors"]
-        Detectors --> Fingerprint["SHA-256 Fingerprint"]
-        Fingerprint --> Anomaly["Anomaly Event"]
+flowchart TB
+    subgraph Sources["1. Telemetry Sources"]
+        direction LR
+        M_Src["Metrics Stream<br/>(Counters, Gauges, Histograms)"]
+        L_Src["Logs Stream<br/>(Structured JSON / Text)"]
+        T_Src["Traces Stream<br/>(W3C TraceContext Spans)"]
     end
 
-    subgraph Correlation["Multi-Signal Correlation"]
-        Anomaly --> Signals["8 Operational Signals<br/>(Graph, Time, Traces, Errors, Deploys)"]
-        Signals --> Correlator["Correlation Engine"]
-        Correlator --> Incident["Correlated Incident Entity"]
+    subgraph IngestionGateway["2. Ingestion Service Core (Port 8081)"]
+        direction TB
+        OteloReceiver["OTel Ingress Endpoint<br/>(gRPC :4317 | HTTP :4318)"]
+
+        subgraph IngestionPipeline["Edge Ingestion Pipeline Safeguards"]
+            direction TB
+            RateLimit["1. Token-Bucket Rate Limiter<br/>(Per-Tenant Quota & Spike Absorber)"]
+            TenantCheck["2. Tenant & API Key Identification<br/>(Argon2id Salted Hash Verification)"]
+            Redact["3. PII & Secret Redaction Engine<br/>(Regex Masking: Bearer Tokens, Keys, Passwords)"]
+            Idempotent["4. Idempotency & De-duplication Check<br/>(Payload SHA-256 Window)"]
+            RateLimit --> TenantCheck --> Redact --> Idempotent
+        end
+
+        KafkaProducer["Partitioned Kafka Producer<br/>(Causal Key: tenant_id:service_id)"]
+        OteloReceiver --> RateLimit
+        Idempotent --> KafkaProducer
     end
 
-    subgraph Evidence["Evidence Assembly"]
-        Incident --> Builder["Evidence Builder"]
-        Builder --> Artifacts["Persisted Evidence Records<br/>(Metrics, Logs, Spans, Diffs)"]
+    subgraph KafkaTransport["3. Apache Kafka Event Transport"]
+        direction LR
+        K_Metrics["telemetry.metrics<br/>(Partitions 0..N)"]
+        K_Logs["telemetry.logs<br/>(Partitions 0..N)"]
+        K_Traces["telemetry.traces<br/>(Partitions 0..N)"]
     end
+
+    subgraph Processors["4. Stream Processing (Watermarked 60s Windows)"]
+        direction LR
+        Proc_M["Metrics Processor<br/>(Tumbling Window Rollups)"]
+        Proc_L["Logs Processor<br/>(Signature Clustering)"]
+        Proc_T["Traces Processor<br/>(Span Assembly & DAG Edges)"]
+    end
+
+    subgraph StorageLayer["5. Dedicated Operational Storage"]
+        direction LR
+        DB_Timescale[("TimescaleDB Hypertables<br/>metrics_raw & 1m/5m/1h Rollups")]
+        DB_OpenSearch[("OpenSearch 2.11 Cluster<br/>logs-index & traces-index")]
+    end
+
+    subgraph DetectionConsumer["6. Analytical Consumer"]
+        DetEngine["Deterministic Detection Engine<br/>(Continuous Aggregates Poller)"]
+    end
+
+    M_Src & L_Src & T_Src --> OteloReceiver
+    KafkaProducer --> K_Metrics & K_Logs & K_Traces
+    K_Metrics --> Proc_M --> DB_Timescale
+    K_Logs --> Proc_L --> DB_OpenSearch
+    K_Traces --> Proc_T --> DB_OpenSearch
+    DB_Timescale --> DetEngine
 ```
 
+---
+
 ### Deterministic Anomaly Detection
+
+```mermaid
+flowchart TD
+    subgraph InputData["1. Time-Series Metric Stream"]
+        MetricsTable[("TimescaleDB Continuous Aggregates<br/>(1m & 5m Rollup Windows)")]
+    end
+
+    subgraph DetectionCore["2. Detection Engine (Deterministic - Zero LLM)"]
+        direction TB
+        Scheduler["Metric Evaluation Scheduler"]
+
+        subgraph DetectorSuite["Dual-Engine Detector Matrix"]
+            direction LR
+            subgraph RuleDetectors["Rule-Based Detectors"]
+                R1["5xx Error Rate Surge"]
+                R2["Latency p95/p99 Threshold"]
+                R3["Resource Saturation (CPU/Mem)"]
+                R4["Queue & Thread Exhaustion"]
+            end
+
+            subgraph StatDetectors["Statistical Detectors"]
+                S1["EWMA Baseline Tracking"]
+                S2["Rolling Dynamic 3-Sigma (μ ± 3σ)"]
+                S3["Day-over-Day Seasonality (DoD/WoW)"]
+                S4["Adaptive Drift Slope Analysis"]
+            end
+        end
+
+        Hysteresis["Dual-Threshold Hysteresis Guard<br/>(Suppresses Flapping on Boundary Fluctuations)"]
+        Scheduler --> DetectorSuite --> Hysteresis
+    end
+
+    subgraph EvaluationPhase["3. Anomaly Evaluation & Lifecycle"]
+        direction TB
+        Scoring["Severity Scorer (CRITICAL, WARNING, INFO)"]
+        Fingerprint["Deterministic SHA-256 Fingerprinter<br/>sha256(tenant_id + service + metric + detector)"]
+        LifecycleManager{"Anomaly Lifecycle Decision"}
+        
+        NewAnomaly["New Active Anomaly"]
+        DuplicateAnomaly["Duplicate Suppression<br/>(Within 15m Cooldown Window)"]
+        ResolvedAnomaly["Auto-Resolved Anomaly<br/>(Nominal for Recovery Window)"]
+
+        Hysteresis --> Scoring --> Fingerprint --> LifecycleManager
+        LifecycleManager -- "New Signature" --> NewAnomaly
+        LifecycleManager -- "Active Signature" --> DuplicateAnomaly
+        LifecycleManager -- "Recovered" --> ResolvedAnomaly
+    end
+
+    subgraph OutputEvent["4. Event Dispatch"]
+        AnomalyEvent["Published Kafka Event: AnomalyDetected<br/>(tenant_id, service, metric, severity, fingerprint)"]
+        CorrelationPipeline["Multi-Signal Correlation Engine"]
+        NewAnomaly --> AnomalyEvent --> CorrelationPipeline
+    end
+
+    MetricsTable --> Scheduler
+```
+
 * **Rule-Based Detectors**: Evaluates 5xx error spikes, status code surges, latency percentile breaches (p95, p99), CPU/memory exhaustion, queue backlogs, and availability drops.
 * **Statistical Detectors**: Implements Exponentially Weighted Moving Averages (EWMA), 3-sigma dynamic variance bands, day-over-day seasonality profiles, and adaptive drift slope tracking.
 * **Hysteresis & Flap Suppression**: Dual-threshold recovery windows prevent alert flapping during transient recoveries.
 
+---
+
 ### Dynamic Topology & Multi-Signal Correlation
+
+```mermaid
+flowchart TD
+    subgraph InboundAnomalies["1. Anomaly Stream Input"]
+        AnomStream["Active Anomaly Events<br/>(Published from Detection Engine)"]
+    end
+
+    subgraph GraphAnalysis["2. Dynamic Dependency Graph Topology"]
+        direction TB
+        TraceSpans["Distributed Trace Spans"] --> TopologyDAG["Dynamic Service Call DAG<br/>(Resolves runtime caller -> callee edges)"]
+        TopologyDAG --> CycleHandler["Tarjan's Cycle Detection<br/>(Resolves circular microservice dependencies)"]
+        CycleHandler --> BlastRadius["Blast Radius & Directionality Analysis<br/>(Downstream impact propagation)"]
+        BlastRadius --> OriginScoring["Candidate Root Origin Scoring<br/>(Ranks nodes by upstream culpability)"]
+    end
+
+    subgraph CorrelationEngine["3. Multi-Signal Correlation Engine"]
+        direction TB
+        OriginScoring --> Evaluator["8 Weighted Correlation Evaluators"]
+
+        subgraph SignalsList["8 Evaluated Operational Signals"]
+            direction TB
+            Sig1["1. Topology Hop Distance (Weight: 0.25)"]
+            Sig2["2. Time Proximity & Decay (Weight: 0.20)"]
+            Sig3["3. Trace Exemplar Linkage (Weight: 0.20)"]
+            Sig4["4. Shared Error Signature (Weight: 0.10)"]
+            Sig5["5. Deployment Window <= 15m (Weight: 0.10)"]
+            Sig6["6. Infrastructure Colocation (Weight: 0.05)"]
+            Sig7["7. Config Diff Synchronization (Weight: 0.05)"]
+            Sig8["8. Historical Co-Occurrence (Weight: 0.05)"]
+        end
+
+        Evaluator --> SignalsList
+        SignalsList --> ScoreFusion["Composite Confidence Fusion Score<br/>Score = Σ (Weight_i * Signal_i)"]
+    end
+
+    subgraph IncidentOutput["4. Incident Formation"]
+        direction TB
+        ScoreFusion --> ConfidenceCheck{"Confidence Level"}
+        
+        ConfHigh["CONFIRMED (Score >= 0.75)"]
+        ConfMed["POSSIBLE (0.50 <= Score < 0.75)"]
+        ConfLow["WEAK (Score < 0.50 - Suppressed)"]
+
+        ConfidenceCheck -- ">= 0.75" --> ConfHigh
+        ConfidenceCheck -- "0.50 - 0.74" --> ConfMed
+        ConfidenceCheck -- "< 0.50" --> ConfLow
+
+        IncidentRecord["Correlated Incident Entity Created<br/>• State: DETECTED<br/>• Root Service Candidate Assigned<br/>• Impacted Services & Blast Radius Registered<br/>• Linked Anomalies Attached"]
+        
+        ConfHigh & ConfMed --> IncidentRecord
+    end
+
+    AnomStream --> Evaluator
+    IncidentRecord --> EvidenceBuilderService["Next Step: Evidence Builder Service"]
+```
+
 * **Distributed Trace DAG**: Resolves runtime service dependencies directly from trace call spans, with automated graph cycle handling.
 * **8 Weighted Correlation Signals**:
   1. *Dependency Graph Hop Distance* (Weight: 0.25)
@@ -410,9 +714,134 @@ flowchart LR
   7. *Configuration Diff Synchronization* (Weight: 0.05)
   8. *Historical Incident Co-Occurrence* (Weight: 0.05)
 
-### Evidence Builder Service
+---
+
+### Evidence Builder Service & Incident Assembly
+
+```mermaid
+flowchart TD
+    subgraph LifecycleFlow["1. Incident Lifecycle State Transitions"]
+        direction LR
+        S_Det["DETECTED"] --> S_Inv["INVESTIGATING"]
+        S_Inv --> S_Ident["IDENTIFIED"]
+        S_Ident --> S_Mit["MITIGATING"]
+        S_Mit --> S_Mon["MONITORING"]
+        S_Mon --> S_Res["RESOLVED"]
+        S_Res --> S_Closed["CLOSED"]
+
+        S_Inv -. "Inconclusive" .-> S_Det
+        S_Mon -. "Regression" .-> S_Mit
+    end
+
+    subgraph EvidencePipeline["2. Deterministic Evidence Builder Pipeline"]
+        direction TB
+        IncTrigger["Incident Registered in DETECTED State"] --> Builder["Evidence Builder Service Orchestrator"]
+
+        subgraph Collectors["Multi-Source System State Harvesting"]
+            direction LR
+            C_Metrics["Metrics Collector<br/>(TimescaleDB 15m Window)"]
+            C_Logs["Log Clusters Collector<br/>(OpenSearch Exceptions & Surges)"]
+            C_Traces["Trace Exemplar Collector<br/>(Failed Spans & Call Stacks)"]
+            C_Deploy["Deployment Collector<br/>(Recent Git Commits & Config Diffs)"]
+            C_Topo["Topology Collector<br/>(Blast Radius & Hop Map)"]
+        end
+
+        Builder --> Collectors
+
+        subgraph Sanitization["Security & Prompt Injection Defense"]
+            direction TB
+            RedactSecrets["Secret Redaction<br/>(Strip auth tokens, API keys, passwords)"]
+            PromptDefense["Prompt Injection Neutralization<br/>(Encapsulate telemetry in &lt;telemetry_data&gt; XML tags)"]
+            RedactSecrets --> PromptDefense
+        end
+
+        Collectors --> RedactSecrets
+
+        subgraph Persistence["PostgreSQL System of Record"]
+            direction TB
+            EvidenceTable[("evidence Table<br/>(type, payload_json, sha256_hash)")]
+            LinkTable[("candidate_evidence Table<br/>(candidate_id, evidence_id, relevance_score)")]
+            EvidenceTable --> LinkTable
+        end
+
+        PromptDefense --> Persistence
+        Persistence --> TriggerAI["Trigger Spring AI Bounded Investigation"]
+    end
+```
+
 * Gathers deterministic metric windows, log clusters, trace exemplars, and Git commit ranges into immutable database records (`evidence` table).
 * Links supporting evidence to root cause candidates via `candidate_evidence` join entities.
+
+---
+
+### Multi-Channel Notification Pipeline & Webhook Security
+
+When an incident is detected or an RCA is synthesized, the Notification Service ensures secure, reliable multi-destination delivery:
+
+```mermaid
+flowchart TD
+    subgraph TriggerSource["1. Incident Notification Trigger"]
+        Event["Incident State Change / RCA Ready<br/>(e.g., IDENTIFIED, MITIGATING, RESOLVED)"]
+    end
+
+    subgraph NotifEngine["2. Notification Service Core"]
+        direction TB
+        DispatchService["NotificationService Orchestrator"]
+        PersistState["Persist Initial State: PENDING<br/>(notification_deliveries table)"]
+        DestValidation["Destination Validation & Rate Limiter<br/>(Check enabled channels per tenant)"]
+
+        DispatchService --> PersistState --> DestValidation
+    end
+
+    subgraph ChannelDispatch["3. Multi-Channel Dispatch Adapters"]
+        direction TB
+        DestValidation --> Route{"Channel Router"}
+
+        subgraph SlackAdapter["Slack Delivery"]
+            SlackChan["Slack Block Kit Formatter<br/>(Action buttons, RCA summary, deep-links)"]
+            SlackApi["Slack Webhook / Bot API"]
+            SlackChan --> SlackApi
+        end
+
+        subgraph EmailAdapter["Email Delivery"]
+            EmailChan["Transactional Email Builder<br/>(HTML Incident Report & Timelines)"]
+            SmtpServer["SMTP / SendGrid / SES Gateway"]
+            EmailChan --> SmtpServer
+        end
+
+        subgraph WebhookAdapter["Custom Webhook Delivery"]
+            direction TB
+            SsrfCheck["SSRF Defense Guard<br/>• Disallow private/link-local IPs (10.*, 192.168.*, 127.*)<br/>• Disallow cloud metadata (169.254.169.254)<br/>• Enforce HTTPS Protocol Only"]
+            HmacSign["HMAC-SHA256 Payload Signature<br/>Header: X-ResolveIQ-Signature: sha256=..."]
+            HttpSend["Dispatched Outbound HTTP POST"]
+            SsrfCheck --> HmacSign --> HttpSend
+        end
+
+        Route -- "Slack" --> SlackChan
+        Route -- "Email" --> EmailChan
+        Route -- "Webhook" --> SsrfCheck
+    end
+
+    subgraph DeliveryLifecycle["4. Reliability & DLQ Management"]
+        direction TB
+        SlackApi & SmtpServer & HttpSend --> ResultCheck{"Delivery Result"}
+        
+        Success["SUCCESS<br/>(Update delivery_status = DELIVERED)"]
+        RetryQueue["Exponential Backoff Retry<br/>(Attempts 1..3 with Jitter)"]
+        Dlq["Dead Letter Queue (DLQ)<br/>(Persistent failure logged for SRE replay)"]
+
+        ResultCheck -- "2xx OK" --> Success
+        ResultCheck -- "Transient Error (5xx / Timeout)" --> RetryQueue
+        RetryQueue -- "Max Retries Exceeded" --> Dlq
+        RetryQueue -- "Next Attempt" --> DestValidation
+    end
+
+    Event --> DispatchService
+```
+
+* **SSRF Defense Guard**: Custom webhooks enforce strict destination validation, rejecting `localhost`, RFC-1918 private subnets, loopback adapters, and cloud instance metadata addresses (`169.254.169.254`).
+* **Cryptographic Signatures**: Webhook payloads are hashed with an HMAC-SHA256 secret key and delivered with the `X-ResolveIQ-Signature` header for tamper-proof client verification.
+* **Delivery Persistence & Retries**: Every notification attempt is tracked in `notification_deliveries`. Failed attempts retry with exponential backoff before landing in a Dead Letter Queue (DLQ).
 
 ---
 
@@ -424,28 +853,88 @@ ResolveIQ's AI investigation engine executes strictly bounded investigation loop
 
 ```mermaid
 flowchart TD
-    Inc["Correlated Incident"]
-    --> InvService["InvestigationService Orchestrator"]
-    --> SpringAi["Spring AI Framework (Agent & Tool Calling)"]
-    --> Safeguards["Safeguard Controller<br/>(Max 12 Calls | 90s Timeout | 16k Token Ceiling)"]
-    
-    subgraph Tools["11 Strongly Typed, Read-Only Investigation Tools"]
-        Safeguards --> T1["queryMetrics(service, metric, range, aggr)"]
-        Safeguards --> T2["searchLogs(service, range, query, severity)"]
-        Safeguards --> T3["inspectTrace(traceId)"]
-        Safeguards --> T4["getServiceDependencies(service)"]
-        Safeguards --> T5["getRecentDeployments(service, range)"]
-        Safeguards --> T6["getIncidentTimeline(incidentId)"]
-        Safeguards --> T7["searchHistoricalIncidents(query, limit)"]
-        Safeguards --> T8["searchRunbooks(query, limit)"]
-        Safeguards --> T9["getServiceHealth(service)"]
-        Safeguards --> T10["getConfigurationChanges(service, range)"]
-        Safeguards --> T11["getCodeChanges(service, commitRange)"]
+    subgraph TriggerPhase["1. Investigation Trigger"]
+        Inc["Correlated Incident Entity<br/>(Status: INVESTIGATING)"]
+        InvService["InvestigationService Orchestrator"]
+        Inc --> InvService
     end
 
-    Tools --> Join["Evidence Verification & Grounding Validator"]
-    Join --> Rca["Structured RCA Synthesizer (Typed JSON Schema)"]
-    Rca --> Human["Human SRE Verification Modal"]
+    subgraph AgentPerimeter["2. Spring AI Orchestration & Safeguards Perimeter"]
+        direction TB
+        
+        subgraph HardCeilings["Strict Resource & Time Safeguards"]
+            direction LR
+            L1["MAX 12 STEPS"]
+            L2["MAX 12 TOOL CALLS"]
+            L3["MAX 90s TIMEOUT"]
+            L4["MAX 10s / TOOL"]
+            L5["MAX 16k TOKENS"]
+        end
+
+        SpringAI["Spring AI Framework (Agent Loop)"]
+        LlmReasoner["LLM Reasoner<br/>(GPT-4o / Claude 3.5 / Gemini / Deterministic)"]
+        
+        InvService --> SpringAI --> LlmReasoner
+    end
+
+    subgraph LoopExecution["3. Bounded Iterative Investigation Loop"]
+        direction TB
+
+        StepCounter["Step & Token Counter Check<br/>(Step &lt; 12 &amp;&amp; Elapsed &lt; 90s &amp;&amp; Tokens &lt; 16k)"]
+        LlmReasoner --> StepCounter
+
+        StepCounter --> ToolGateway["Tool Security Gateway<br/>(Authorization &amp; Tenant Filter)"]
+
+        subgraph ReadOnlyUniverse["READ-ONLY TOOL UNIVERSE (11 Strongly Typed Tools)"]
+            direction TB
+            T1["queryMetrics(service, metric, range, aggr)"]
+            T2["searchLogs(service, range, query, severity)"]
+            T3["inspectTrace(traceId)"]
+            T4["getServiceDependencies(service)"]
+            T5["getRecentDeployments(service, range)"]
+            T6["getIncidentTimeline(incidentId)"]
+            T7["searchHistoricalIncidents(query, limit)"]
+            T8["searchRunbooks(query, limit)"]
+            T9["getServiceHealth(service)"]
+            T10["getConfigurationChanges(service, range)"]
+            T11["getCodeChanges(service, commitRange)"]
+        end
+
+        subgraph ForbiddenOperations["⛔ FORBIDDEN EXECUTION BOUNDARY"]
+            F1["❌ NO Shell / Bash / CLI Execution"]
+            F2["❌ NO Arbitrary / Raw SQL Queries"]
+            F3["❌ NO Kubernetes / kubectl Mutations"]
+            F4["❌ NO Configuration Mutations or Writes"]
+        end
+
+        ToolGateway --> ReadOnlyUniverse
+        ToolGateway -. "Attempted Mutation Blocked" .-> ForbiddenOperations
+
+        ReadOnlyUniverse --> ToolResult["Raw Tool Result"]
+        ToolResult --> EvidenceValidator["Evidence Validation & Sanitization<br/>(Wrap telemetry in &lt;telemetry_data&gt; XML tags)"]
+        EvidenceValidator --> ContextAssembly["Context Assembly<br/>(Append validated evidence to conversation memory)"]
+
+        ContextAssembly --> Decision{"Need More Evidence?"}
+        Decision -- "YES (Continue Loop)" --> LlmReasoner
+    end
+
+    subgraph SynthesisPhase["4. Structured RCA & Human Verification"]
+        direction TB
+        Decision -- "NO (Sufficient Evidence / Ceiling Reached)" --> StructuredRCA["Structured RCA Synthesizer"]
+
+        subgraph RcaPayload["Structured RCA Output Schema"]
+            direction TB
+            R1["Root Cause Candidates (Ranked)"]
+            R2["Bayesian Confidence Score (0.0 to 1.0)"]
+            R3["Supporting &amp; Counter-Evidence IDs"]
+            R4["Mitigation &amp; Rollback Actions"]
+            R1 --> R2 --> R3 --> R4
+        end
+
+        StructuredRCA --> RcaPayload
+        RcaPayload --> GroundingCheck["Grounding Verification Gate<br/>(Drop ungrounded hypotheses; if ambiguous -> insufficientEvidence=true)"]
+        GroundingCheck --> HumanVerification["5. SRE Human Verification Gate<br/>(VERIFIED / REJECTED / NEEDS_MORE_EVIDENCE)"]
+    end
 ```
 
 ### Investigation Loop & Safeguards
@@ -462,21 +951,72 @@ Historical postmortems, incident post-incident reviews (PIRs), and standard oper
 
 ### Hybrid Retrieval (pgvector + BM25)
 
+The diagram below illustrates how historical postmortems and runbooks are indexed and retrieved using hybrid search (65% pgvector cosine distance + 35% PostgreSQL BM25 lexical ranking), strictly partitioned by tenant:
+
 ```mermaid
-flowchart LR
-    subgraph DocumentIngestion["Knowledge Document Ingestion"]
-        Doc["Markdown PIR / SOP"] --> Chunk["Token Chunker (250-500 Tokens, 50 Overlap)"]
-        Chunk --> Sanitize["Prompt Injection Sanitizer"]
-        Sanitize --> Embed["Embedding Engine (384-dim Vectors)"]
-        Embed --> PGVector["pgvector (HNSW Index, vector_cosine_ops)"]
+flowchart TD
+    subgraph KnowledgeSources["1. Enterprise Knowledge Corpus"]
+        direction LR
+        K1["Incident Postmortems<br/>(PIR Markdown Docs)"]
+        K2["Operational Runbooks<br/>(Standard SOP Guides)"]
+        K3["Historical Incidents<br/>(Resolved RCAs & Timelines)"]
+        K4["Architecture Specs<br/>(Service Dependency Docs)"]
+        K5["Troubleshooting Guides<br/>(Known Fixes & Triage)"]
     end
 
-    subgraph QueryPipeline["Tenant-Isolated Hybrid Retrieval"]
-        Query["Incident Context Query"] --> TenantFilter["1. Database Pre-Filter: Scope by tenant_id"]
-        TenantFilter --> BM25["2. Okapi BM25 Lexical Ranker"]
-        TenantFilter --> Cosine["2. Cosine Vector Similarity (pgvector)"]
-        BM25 & Cosine --> ConvexScore["3. Convex Score Fusion: α*S_vec + (1-α)*S_bm25"]
-        ConvexScore --> ContextInjection["4. Inject Grounded Runbook into AI Loop Context"]
+    subgraph PostgresEngine["2. Unified PostgreSQL Database Engine (Relational + pgvector)"]
+        direction TB
+
+        subgraph RelationalTables["Relational Schema (System of Record)"]
+            T_Docs["knowledge_docs<br/>(id, tenant_id, title, doc_type)"]
+            T_Chunks["knowledge_chunks<br/>(id, doc_id, tenant_id, chunk_text)"]
+        end
+
+        subgraph ExtensionsInside["Extensions Operating Inside PostgreSQL"]
+            direction LR
+            Ext_Vector["pgvector Extension<br/>• Column: embedding vector(384)<br/>• Index: HNSW (m=16, ef_construction=64)<br/>• Distance: vector_cosine_ops (<=>)"]
+            Ext_FTS["PostgreSQL Text Engine<br/>• Column: tsv_content tsvector<br/>• Index: GIN (english dictionary)<br/>• Ranker: ts_rank_cd (BM25 scoring)"]
+        end
+
+        T_Chunks --> Ext_Vector
+        T_Chunks --> Ext_FTS
+    end
+
+    KnowledgeSources -->|"Document Token Chunker & Embedding Engine"| PostgresEngine
+
+    subgraph RAGPipeline["3. Tenant-Isolated Hybrid Retrieval Execution"]
+        direction TB
+        AgentQuery["AI Investigation Agent<br/>(Tool: searchRunbooks / searchHistoricalIncidents)"]
+        QueryEmbedding["Generate Query Embedding<br/>(384-Dimensional Dense Vector)"]
+        AgentQuery --> QueryEmbedding
+
+        TenantPreFilter["Mandatory Tenant Pre-Filter<br/>WHERE tenant_id = :tenant_id"]
+        QueryEmbedding --> TenantPreFilter
+
+        subgraph DualSearch["Parallel Retrieval Strategy"]
+            direction LR
+            VecSearch["Vector Cosine Search<br/>• pgvector HNSW index<br/>• Weight: 65% (&alpha; = 0.65)"]
+            Bm25Search["BM25 Lexical Search<br/>• PostgreSQL full-text GIN<br/>• Weight: 35% (1 - &alpha; = 0.35)"]
+        end
+
+        TenantPreFilter --> VecSearch & Bm25Search
+
+        ScoreFusion["Convex Hybrid Score Fusion<br/>Score = (0.65 * S_vector) + (0.35 * S_bm25)"]
+        VecSearch & Bm25Search --> ScoreFusion
+
+        TopResults["Top-K Candidate Chunks (K=5)"]
+        ScoreFusion --> TopResults
+
+        Sanitizer["Knowledge Sanitizer & Prompt Defense<br/>(Verify tenant isolation & strip instruction injections)"]
+        TopResults --> Sanitizer
+    end
+
+    subgraph RCAIntegration["4. Grounded Context Injection & Structured RCA"]
+        direction TB
+        EvidenceCitations["Grounded Citations & Runbook Guidance<br/>(Tagged with Document IDs & Source Links)"]
+        Sanitizer --> EvidenceCitations
+        EvidenceCitations --> AgentContext["Spring AI Agent Working Context"]
+        AgentContext --> StructuredRCA["Structured RCA Generation"]
     end
 ```
 
