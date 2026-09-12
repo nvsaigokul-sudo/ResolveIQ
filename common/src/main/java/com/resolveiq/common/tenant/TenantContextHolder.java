@@ -35,6 +35,10 @@ public final class TenantContextHolder {
         return getRequiredContext().tenantId();
     }
 
+    public static UUID requireTenantId() {
+        return getRequiredTenantId();
+    }
+
     public static void clear() {
         CONTEXT.remove();
     }

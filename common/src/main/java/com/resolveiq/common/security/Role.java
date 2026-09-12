@@ -16,7 +16,9 @@ public enum Role {
             "rules:manage",
             "incidents:manage",
             "investigation:trigger",
-            "incidents:read"
+            "incidents:read",
+            "knowledge:manage",
+            "knowledge:read"
     )),
     ADMIN(Set.of(
             "org:manage",
@@ -26,25 +28,33 @@ public enum Role {
             "rules:manage",
             "incidents:manage",
             "investigation:trigger",
-            "incidents:read"
+            "incidents:read",
+            "knowledge:manage",
+            "knowledge:read"
     )),
     INCIDENT_MANAGER(Set.of(
             "incidents:manage",
             "investigation:trigger",
-            "incidents:read"
+            "incidents:read",
+            "knowledge:manage",
+            "knowledge:read"
     )),
     SRE(Set.of(
             "incidents:manage",
             "rules:manage",
             "investigation:trigger",
-            "incidents:read"
+            "incidents:read",
+            "knowledge:manage",
+            "knowledge:read"
     )),
     DEVELOPER(Set.of(
             "incidents:comment",
-            "incidents:read"
+            "incidents:read",
+            "knowledge:read"
     )),
     VIEWER(Set.of(
-            "incidents:read"
+            "incidents:read",
+            "knowledge:read"
     ));
 
     private final Set<String> permissions;
@@ -83,6 +93,14 @@ public enum Role {
 
     public boolean canModifyIncidentState() {
         return hasPermission("incidents:manage");
+    }
+
+    public boolean canManageKnowledge() {
+        return hasPermission("knowledge:manage");
+    }
+
+    public boolean canReadKnowledge() {
+        return hasPermission("knowledge:read");
     }
 
     public boolean isReadOnly() {

@@ -219,3 +219,30 @@ CREATE TABLE IF NOT EXISTS feedback (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS knowledge_docs (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+    doc_type VARCHAR(50) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    source_uri VARCHAR(1000),
+    service VARCHAR(255),
+    environment VARCHAR(100),
+    raw_content TEXT NOT NULL,
+    content_hash VARCHAR(64) NOT NULL,
+    metadata TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    doc_id UUID NOT NULL REFERENCES knowledge_docs(id) ON DELETE CASCADE,
+    chunk_index INT NOT NULL,
+    chunk_text TEXT NOT NULL,
+    token_count INT NOT NULL,
+    embedding TEXT,
+    header_path VARCHAR(500),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
