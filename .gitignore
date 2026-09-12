@@ -55,5 +55,20 @@ Thumbs.db
 # Logs & Environment
 *.log
 .env
-.env.local
-.env.*.local
+.env.*
+*.env
+
+# Secrets, Keys & Certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.secret
+credentials.json
+id_rsa*
+id_ed25519*
+secrets.yml
+secrets.yaml
+
