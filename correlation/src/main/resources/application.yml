@@ -1,0 +1,34 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: resolveiq-correlation
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+    consumer:
+      group-id: resolveiq-correlation-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+resolveiq:
+  kafka:
+    topics:
+      anomalies: telemetry.anomalies
+      traces: telemetry.traces
+      incidents: incidents
+  correlation:
+    window-minutes: 15
+    cooldown-minutes: 30
+
+logging:
+  level:
+    com.resolveiq.correlation: INFO
+    org.apache.kafka: WARN

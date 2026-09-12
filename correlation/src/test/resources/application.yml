@@ -1,0 +1,24 @@
+server:
+  port: -1
+
+spring:
+  application:
+    name: resolveiq-correlation-test
+  kafka:
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+resolveiq:
+  kafka:
+    topics:
+      anomalies: telemetry.anomalies
+      traces: telemetry.traces
+      incidents: incidents
+  correlation:
+    window-minutes: 15
+    cooldown-minutes: 30
+
+logging:
+  level:
+    com.resolveiq.correlation: DEBUG
