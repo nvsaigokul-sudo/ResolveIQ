@@ -29,12 +29,30 @@ spring:
     enabled: true
     baseline-on-migrate: true
     locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      retries: 3
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: resolveiq-incident-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 resolveiq:
   jwt:
     secret: ${RESOLVEIQ_JWT_SECRET:production-grade-jwt-secret-key-for-resolveiq-platform-secure-token}
     issuer: resolveiq-auth
     expiration-minutes: 15
+  kafka:
+    topics:
+      incidents: incidents
+      incident-events: incident.events
+      evidence: telemetry.evidence
 
 management:
   endpoints:

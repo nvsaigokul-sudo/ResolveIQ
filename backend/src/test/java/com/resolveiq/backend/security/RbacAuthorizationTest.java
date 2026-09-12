@@ -46,6 +46,9 @@ class RbacAuthorizationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private com.resolveiq.backend.repository.IncidentRepository incidentRepository;
+
     private OrganizationEntity tenant;
     private UUID incidentId;
 
@@ -53,7 +56,24 @@ class RbacAuthorizationTest {
     void setUp() {
         String slug = "rbac-org-" + UUID.randomUUID().toString().substring(0, 8);
         tenant = tenantService.createOrganization("RBAC Test Corp", slug, "ENTERPRISE");
-        incidentId = UUID.randomUUID();
+
+        TenantContextHolder.setContext(TenantContext.ofSystem(tenant.getId(), "test-setup"));
+        try {
+            com.resolveiq.backend.domain.ProjectEntity project = tenantService.createProject("Core Project", "core-" + slug, "Test project");
+            com.resolveiq.backend.domain.IncidentEntity incident = new com.resolveiq.backend.domain.IncidentEntity(
+                    tenant.getId(),
+                    project.getId(),
+                    "fingerprint-" + UUID.randomUUID(),
+                    "Test Outage",
+                    "payment-service",
+                    com.resolveiq.common.incident.IncidentSeverity.SEV2,
+                    "Checkout Team"
+            );
+            incident.setStatus(com.resolveiq.common.incident.IncidentStatus.DETECTED);
+            incidentId = incidentRepository.save(incident).getId();
+        } finally {
+            TenantContextHolder.clear();
+        }
     }
 
     @Test

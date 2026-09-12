@@ -1,5 +1,6 @@
 package com.resolveiq.backend.api;
 
+import com.resolveiq.backend.exception.InvalidLifecycleTransitionException;
 import com.resolveiq.backend.security.TenantAuthenticationFilter;
 import com.resolveiq.backend.service.AuditLogService;
 import com.resolveiq.common.dto.ErrorResponse;
@@ -106,6 +107,19 @@ public class GlobalExceptionHandler {
         String traceId = getTraceId(request, response);
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("RESOURCE_NOT_FOUND", ex.getMessage(), traceId, ex.getDetails()));
+    }
+
+    @ExceptionHandler(InvalidLifecycleTransitionException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidLifecycleTransition(InvalidLifecycleTransitionException ex,
+                                                                           HttpServletRequest request,
+                                                                           HttpServletResponse response) {
+        String traceId = getTraceId(request, response);
+        Map<String, Object> details = Map.of(
+                "fromStatus", ex.getFromStatus() != null ? ex.getFromStatus().name() : "NULL",
+                "toStatus", ex.getToStatus() != null ? ex.getToStatus().name() : "NULL"
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("INVALID_LIFECYCLE_TRANSITION", ex.getMessage(), traceId, details));
     }
 
     @ExceptionHandler(ValidationException.class)

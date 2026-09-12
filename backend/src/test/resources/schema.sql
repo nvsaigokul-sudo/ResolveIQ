@@ -111,3 +111,111 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE TRIGGER IF NOT EXISTS trg_audit_logs_no_update_or_delete
 BEFORE UPDATE, DELETE ON audit_logs
 FOR EACH ROW CALL "com.resolveiq.backend.security.H2AuditLogTrigger";
+
+CREATE TABLE IF NOT EXISTS incidents (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    fingerprint VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    severity VARCHAR(50) NOT NULL,
+    priority VARCHAR(50) NOT NULL DEFAULT 'P2',
+    title VARCHAR(500) NOT NULL,
+    root_service VARCHAR(255) NOT NULL,
+    affected_services TEXT NOT NULL DEFAULT '[]',
+    owning_team VARCHAR(255),
+    assignee_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    resolution_notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    closed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS incident_events (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    event_type VARCHAR(100) NOT NULL,
+    actor_type VARCHAR(50) NOT NULL DEFAULT 'SYSTEM',
+    actor_id UUID,
+    summary TEXT NOT NULL,
+    payload TEXT,
+    reference_event_id UUID,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_incident_events_no_update_or_delete
+BEFORE UPDATE, DELETE ON incident_events
+FOR EACH ROW CALL "com.resolveiq.backend.security.H2IncidentEventTrigger";
+
+CREATE TABLE IF NOT EXISTS evidence (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    source VARCHAR(50) NOT NULL,
+    service VARCHAR(255) NOT NULL,
+    query_used TEXT NOT NULL,
+    result_reference VARCHAR(500) NOT NULL,
+    payload_summary TEXT NOT NULL,
+    relevance_score DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    confidence DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    relationship_to_hypothesis VARCHAR(100),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS investigations (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    status VARCHAR(50) NOT NULL,
+    model_identifier VARCHAR(100),
+    prompt_version VARCHAR(50),
+    tool_call_count INT NOT NULL DEFAULT 0,
+    total_tokens INT NOT NULL DEFAULT 0,
+    estimated_cost DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    summary TEXT,
+    uncertainty_statement TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS root_cause_candidates (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    investigation_id UUID NOT NULL REFERENCES investigations(id) ON DELETE CASCADE,
+    incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    rank INT NOT NULL,
+    hypothesis TEXT NOT NULL,
+    root_service VARCHAR(255) NOT NULL,
+    confidence DOUBLE PRECISION NOT NULL,
+    reasoning TEXT NOT NULL,
+    verification_status VARCHAR(50) NOT NULL DEFAULT 'UNVERIFIED',
+    verified_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    verification_notes TEXT,
+    verified_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS candidate_evidence (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    candidate_id UUID NOT NULL REFERENCES root_cause_candidates(id) ON DELETE CASCADE,
+    evidence_id UUID NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS feedback (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    candidate_id UUID REFERENCES root_cause_candidates(id) ON DELETE SET NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    verification_status VARCHAR(50) NOT NULL,
+    comment TEXT,
+    rating INT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
