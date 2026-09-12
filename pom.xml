@@ -14,6 +14,7 @@
     <modules>
         <module>common</module>
         <module>backend</module>
+        <module>ingestion</module>
     </modules>
 
     <properties>

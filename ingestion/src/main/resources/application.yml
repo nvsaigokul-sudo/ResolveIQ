@@ -1,0 +1,34 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: resolveiq-ingestion
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      retries: 3
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+
+resolveiq:
+  jwt:
+    secret: ${RESOLVEIQ_JWT_SECRET:production-grade-jwt-secret-key-for-resolveiq-platform-secure-token}
+    issuer: resolveiq-auth
+    expiration-minutes: 15
+  ingestion:
+    grpc:
+      port: 4317
+      enabled: true
+    max-payload-bytes: 1048576
+    kafka:
+      produce-timeout-ms: 3000
+    ratelimit:
+      capacity: 10000
+      refill-rate: 5000
+    dedup:
+      ttl-minutes: 10

@@ -1,0 +1,27 @@
+server:
+  port: -1
+
+spring:
+  application:
+    name: resolveiq-ingestion-test
+  kafka:
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+resolveiq:
+  jwt:
+    secret: this-is-a-test-secret-key-that-is-at-least-32-chars-long-for-testing
+    issuer: resolveiq-test
+    expiration-minutes: 15
+  ingestion:
+    grpc:
+      enabled: false
+    max-payload-bytes: 1048576
+    kafka:
+      produce-timeout-ms: 1000
+    ratelimit:
+      capacity: 5
+      refill-rate: 1
+    dedup:
+      ttl-minutes: 10

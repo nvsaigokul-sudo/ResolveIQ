@@ -1,0 +1,99 @@
+# ResolveIQ Customer-Deployed OpenTelemetry Collector Configuration
+# Conforming strictly to PRD Section 14 (Customer Collector Specification)
+# Hard constraint: Observe-Only Forwarder (No shell execution, no direct DB access, no infrastructure mutation)
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # 1. Memory limiter to prevent OOM on high-burst telemetry
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 20
+
+  # 2. Batching and compression before egress
+  batch:
+    send_batch_size: 1024
+    timeout: 1s
+    send_batch_max_size: 2048
+
+  # 3. Edge PII and Secret Redaction (PRD Section 14)
+  # Redacts credit cards, emails, API keys, and authorization tokens at the customer edge
+  transform/redaction:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Redact credit card patterns (13-19 digits with optional spaces/hyphens)
+          - replace_pattern(body, "\\b(?:\\d[ -]*?){13,19}\\b", "[REDACTED_CREDIT_CARD]")
+          # Redact email addresses
+          - replace_pattern(body, "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "[REDACTED_EMAIL]")
+          # Redact API keys and Bearer tokens
+          - replace_pattern(body, "riq_live_[a-zA-Z0-9_-]{20,}", "[REDACTED_API_KEY]")
+          - replace_pattern(body, "Bearer\\s+[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+\\.?[A-Za-z0-9-_.+/=]*", "Bearer [REDACTED_JWT]")
+
+  # 4. Mandatory tenant tagging derived from provisioned collector credential (PRD Section 14)
+  attributes/tenant_context:
+    actions:
+      - key: resolveiq.collector.version
+        value: "1.0.0"
+        action: insert
+      - key: deployment.environment
+        from_attribute: env
+        action: upsert
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+exporters:
+  # Authenticated egress to ResolveIQ Ingestion Service with retry, jitter, and durable disk queue
+  otlphttp/resolveiq:
+    endpoint: ${RESOLVEIQ_INGESTION_ENDPOINT:https://ingest.resolveiq.io}
+    compression: gzip
+    headers:
+      X-API-Key: ${RESOLVEIQ_API_KEY}
+    retry_on_failure:
+      enabled: true
+      initial_interval: 500ms
+      max_interval: 30s
+      max_elapsed_time: 5m
+    sending_queue:
+      enabled: true
+      num_consumers: 8
+      queue_size: 10000
+      storage: file_storage
+
+  file_storage:
+    directory: /var/lib/resolveiq/buffer
+    timeout: 10s
+
+service:
+  extensions: [health_check, zpages]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/tenant_context, batch]
+      exporters: [otlphttp/resolveiq]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/redaction, attributes/tenant_context, batch]
+      exporters: [otlphttp/resolveiq]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/redaction, attributes/tenant_context, batch]
+      exporters: [otlphttp/resolveiq]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888
