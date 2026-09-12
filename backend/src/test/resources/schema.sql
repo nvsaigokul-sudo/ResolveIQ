@@ -355,4 +355,31 @@ CREATE TABLE IF NOT EXISTS evaluation_case_results (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS customer_registrations (
+    id UUID PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    full_name VARCHAR(255) NOT NULL,
+    company_name VARCHAR(255) NOT NULL,
+    job_title VARCHAR(255),
+    status VARCHAR(64) NOT NULL DEFAULT 'PENDING_EMAIL_VERIFICATION',
+    verification_token_hash VARCHAR(255),
+    verification_token_expires_at TIMESTAMP WITH TIME ZONE,
+    email_verified_at TIMESTAMP WITH TIME ZONE,
+    assigned_tenant_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+    assigned_role VARCHAR(64),
+    reviewed_by UUID,
+    reviewed_at TIMESTAMP WITH TIME ZONE,
+    rejection_reason TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
 
+CREATE TABLE IF NOT EXISTS auth_otps (
+    id UUID PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    otp_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    consumed BOOLEAN NOT NULL DEFAULT FALSE,
+    attempts INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);

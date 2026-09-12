@@ -12,6 +12,18 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, role?: string, tenantId?: string) => Promise<void>;
+  requestOtp: (email: string) => Promise<{ email: string; message: string; expiresInSeconds: number; devOtp?: string }>;
+  verifyOtp: (email: string, otp: string) => Promise<void>;
+  registerCustomer: (data: { email: string; fullName: string; companyName: string; jobTitle?: string }) => Promise<{
+    id: string;
+    email: string;
+    fullName: string;
+    companyName: string;
+    status: string;
+    message: string;
+    verificationToken?: string;
+  }>;
+  verifyEmail: (token: string) => Promise<{ id: string; email: string; status: string; message: string }>;
   logout: () => void;
   switchRole: (newRole: UserRole) => Promise<void>;
   switchTenant: (tenantId: string) => Promise<void>;
@@ -146,7 +158,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const requestOtp = async (email: string) => {
+    setIsLoading(true);
+    try {
+      const res = await api.post<{
+        email: string;
+        message: string;
+        expiresInSeconds: number;
+        devOtp?: string;
+      }>("/api/v1/auth/otp/request", { email });
+      return res;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOtp = async (email: string, otp: string) => {
+    setIsLoading(true);
+    try {
+      const res = await api.post<{
+        accessToken: string;
+        tokenType: string;
+        tenantId: string;
+        userId: string;
+        email: string;
+        fullName: string;
+        role: UserRole;
+        organizationName: string;
+        organizationSlug: string;
+      }>("/api/v1/auth/otp/verify", { email, otp });
+
+      if (res?.accessToken) {
+        localStorage.setItem("resolveiq_token", res.accessToken);
+        localStorage.setItem("resolveiq_tenant_id", res.tenantId);
+        await refreshProfile();
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const registerCustomer = async (data: {
+    email: string;
+    fullName: string;
+    companyName: string;
+    jobTitle?: string;
+  }) => {
+    return await api.post<{
+      id: string;
+      email: string;
+      fullName: string;
+      companyName: string;
+      status: string;
+      message: string;
+      verificationToken?: string;
+    }>("/api/v1/auth/register", data);
+  };
+
+  const verifyEmail = async (token: string) => {
+    return await api.post<{
+      id: string;
+      email: string;
+      status: string;
+      message: string;
+    }>("/api/v1/auth/verify-email", { token });
+  };
+
   const logout = () => {
+    api.post("/api/v1/auth/logout", {}).catch((e) => console.warn("Logout notification skipped:", e));
     localStorage.removeItem("resolveiq_token");
     localStorage.removeItem("resolveiq_tenant_id");
     setUser(null);
@@ -199,6 +278,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         isLoading,
         login,
+        requestOtp,
+        verifyOtp,
+        registerCustomer,
+        verifyEmail,
         logout,
         switchRole,
         switchTenant,

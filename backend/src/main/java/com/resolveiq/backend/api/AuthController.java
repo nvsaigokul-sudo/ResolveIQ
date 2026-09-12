@@ -4,7 +4,15 @@ import com.resolveiq.backend.domain.OrganizationEntity;
 import com.resolveiq.backend.domain.UserEntity;
 import com.resolveiq.backend.repository.OrganizationRepository;
 import com.resolveiq.backend.repository.UserRepository;
+import com.resolveiq.backend.dto.auth.CustomerRegistrationRequest;
+import com.resolveiq.backend.dto.auth.CustomerRegistrationResponse;
+import com.resolveiq.backend.dto.auth.OtpRequest;
+import com.resolveiq.backend.dto.auth.OtpResponse;
+import com.resolveiq.backend.dto.auth.OtpVerifyRequest;
+import com.resolveiq.backend.dto.auth.VerifyEmailRequest;
+import com.resolveiq.backend.dto.auth.VerifyEmailResponse;
 import com.resolveiq.backend.service.AuditLogService;
+import com.resolveiq.backend.service.CustomerAuthService;
 import com.resolveiq.common.dto.ApiResponse;
 import com.resolveiq.common.exception.ResourceNotFoundException;
 import com.resolveiq.common.exception.UnauthorizedException;
@@ -38,15 +46,18 @@ public class AuthController {
     private final UserRepository userRepository;
     private final JwtTokenUtil jwtTokenUtil;
     private final AuditLogService auditLogService;
+    private final CustomerAuthService customerAuthService;
 
     public AuthController(OrganizationRepository organizationRepository,
                           UserRepository userRepository,
                           JwtTokenUtil jwtTokenUtil,
-                          AuditLogService auditLogService) {
+                          AuditLogService auditLogService,
+                          CustomerAuthService customerAuthService) {
         this.organizationRepository = organizationRepository;
         this.userRepository = userRepository;
         this.jwtTokenUtil = jwtTokenUtil;
         this.auditLogService = auditLogService;
+        this.customerAuthService = customerAuthService;
     }
 
     public record LoginRequest(
@@ -229,5 +240,51 @@ public class AuthController {
                 org.getName(),
                 org.getSlug()
         ));
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<CustomerRegistrationResponse> register(@Valid @RequestBody CustomerRegistrationRequest request) {
+        CustomerRegistrationResponse response = customerAuthService.registerCustomer(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/verify-email")
+    public ResponseEntity<VerifyEmailResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        VerifyEmailResponse response = customerAuthService.verifyEmail(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/otp/request")
+    public ResponseEntity<OtpResponse> requestOtp(@Valid @RequestBody OtpRequest request) {
+        OtpResponse response = customerAuthService.requestOtp(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/otp/verify")
+    public ResponseEntity<AuthResponse> verifyOtp(@Valid @RequestBody OtpVerifyRequest request) {
+        AuthResponse response = customerAuthService.verifyOtp(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout() {
+        TenantContextHolder.getContext().ifPresent(ctx -> {
+            try {
+                auditLogService.record(
+                        ctx.tenantId(),
+                        ctx.userId() != null ? ctx.userId() : ctx.apiKeyId(),
+                        ctx.actorType() != null ? ctx.actorType().name() : "USER",
+                        "USER_LOGGED_OUT",
+                        "user:" + ctx.userId(),
+                        null,
+                        "logout successful",
+                        null,
+                        ctx.traceId()
+                );
+            } catch (Exception ex) {
+                log.warn("Failed to record logout audit log: {}", ex.getMessage());
+            }
+        });
+        return ResponseEntity.ok(ApiResponse.ok(null));
     }
 }

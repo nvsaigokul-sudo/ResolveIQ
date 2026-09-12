@@ -272,3 +272,30 @@ export interface TenantQuota {
   incidentCurrentUsage: number;
   retentionDays: number;
 }
+
+export type RegistrationStatus =
+  | "PENDING_EMAIL_VERIFICATION"
+  | "EMAIL_VERIFIED"
+  | "PENDING_ADMIN_REVIEW"
+  | "APPROVED"
+  | "ACTIVE"
+  | "REJECTED"
+  | "SUSPENDED"
+  | "DEACTIVATED";
+
+export interface CustomerRegistration {
+  id: string;
+  email: string;
+  fullName: string;
+  companyName: string;
+  jobTitle?: string;
+  status: RegistrationStatus;
+  emailVerifiedAt?: string;
+  assignedTenantId?: string;
+  assignedRole?: UserRole;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
