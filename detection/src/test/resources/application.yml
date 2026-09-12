@@ -1,0 +1,21 @@
+server:
+  port: -1
+
+spring:
+  application:
+    name: resolveiq-detection-test
+  kafka:
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+resolveiq:
+  kafka:
+    topics:
+      anomalies: telemetry.anomalies
+  detection:
+    cooldown-minutes: 15
+
+logging:
+  level:
+    com.resolveiq.detection: DEBUG

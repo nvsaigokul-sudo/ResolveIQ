@@ -16,6 +16,7 @@
         <module>backend</module>
         <module>ingestion</module>
         <module>processors</module>
+        <module>detection</module>
     </modules>
 
     <properties>
