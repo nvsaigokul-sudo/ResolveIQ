@@ -1,0 +1,72 @@
+{
+  "index_patterns": ["resolveiq-logs-*"],
+  "template": {
+    "settings": {
+      "index": {
+        "number_of_shards": 2,
+        "number_of_replicas": 1,
+        "refresh_interval": "1s",
+        "mapping": {
+          "total_fields": {
+            "limit": 2000
+          }
+        }
+      }
+    },
+    "mappings": {
+      "_routing": {
+        "required": true
+      },
+      "properties": {
+        "event_id": {
+          "type": "keyword"
+        },
+        "tenant_id": {
+          "type": "keyword"
+        },
+        "project_id": {
+          "type": "keyword"
+        },
+        "service_id": {
+          "type": "keyword"
+        },
+        "environment": {
+          "type": "keyword"
+        },
+        "timestamp": {
+          "type": "date"
+        },
+        "severity": {
+          "type": "keyword"
+        },
+        "message": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 512
+            }
+          }
+        },
+        "trace_id": {
+          "type": "keyword"
+        },
+        "span_id": {
+          "type": "keyword"
+        },
+        "attributes": {
+          "type": "object",
+          "dynamic": true
+        },
+        "resource_attributes": {
+          "type": "object",
+          "dynamic": true
+        }
+      }
+    }
+  },
+  "priority": 100,
+  "_meta": {
+    "description": "ResolveIQ canonical log index template with tenant routing and 14d hot / 90d retention (PRD §10.4, §13.1, §37)"
+  }
+}

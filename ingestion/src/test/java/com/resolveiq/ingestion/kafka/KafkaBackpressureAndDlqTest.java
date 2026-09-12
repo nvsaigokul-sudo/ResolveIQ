@@ -1,8 +1,8 @@
 package com.resolveiq.ingestion.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.resolveiq.ingestion.model.KafkaEventEnvelope;
-import com.resolveiq.ingestion.model.MetricObservedPayload;
+import com.resolveiq.common.telemetry.KafkaEventEnvelope;
+import com.resolveiq.common.telemetry.MetricObservedPayload;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.errors.TimeoutException;
 import org.junit.jupiter.api.DisplayName;

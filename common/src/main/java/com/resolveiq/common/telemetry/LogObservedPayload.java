@@ -1,5 +1,6 @@
-package com.resolveiq.ingestion.model;
+package com.resolveiq.common.telemetry;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
@@ -9,6 +10,7 @@ import java.util.Map;
 /**
  * Log payload conforming to OpenTelemetry canonical data model (PRD Section 13.1).
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record LogObservedPayload(
         @JsonProperty("timestamp") Instant timestamp,
         @JsonProperty("severity") String severity,

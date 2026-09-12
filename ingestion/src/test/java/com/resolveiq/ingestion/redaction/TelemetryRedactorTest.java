@@ -1,8 +1,8 @@
 package com.resolveiq.ingestion.redaction;
 
-import com.resolveiq.ingestion.model.LogObservedPayload;
-import com.resolveiq.ingestion.model.MetricObservedPayload;
-import com.resolveiq.ingestion.model.TraceObservedPayload;
+import com.resolveiq.common.telemetry.LogObservedPayload;
+import com.resolveiq.common.telemetry.MetricObservedPayload;
+import com.resolveiq.common.telemetry.TraceObservedPayload;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

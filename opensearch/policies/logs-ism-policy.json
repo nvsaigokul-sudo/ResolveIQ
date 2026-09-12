@@ -1,0 +1,63 @@
+{
+  "policy": {
+    "description": "ResolveIQ Logs Retention ISM Policy (PRD §13.1, §37): 14 days hot, rollover to cold archive, delete after 90 days total.",
+    "default_state": "hot",
+    "states": [
+      {
+        "name": "hot",
+        "actions": [
+          {
+            "rollover": {
+              "min_index_age": "1d",
+              "min_primary_shard_size": "30gb"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "state_name": "cold",
+            "conditions": {
+              "min_index_age": "14d"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cold",
+        "actions": [
+          {
+            "read_only": {}
+          },
+          {
+            "replica_count": {
+              "number_of_replicas": 0
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "state_name": "delete",
+            "conditions": {
+              "min_index_age": "90d"
+            }
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "actions": [
+          {
+            "delete": {}
+          }
+        ],
+        "transitions": []
+      }
+    ],
+    "ism_template": [
+      {
+        "index_patterns": ["resolveiq-logs-*"],
+        "priority": 100
+      }
+    ]
+  }
+}

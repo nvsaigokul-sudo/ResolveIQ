@@ -1,0 +1,49 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: resolveiq-processors
+  datasource:
+    url: jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5432}/${DATABASE_NAME:resolveiq}
+    username: ${DATABASE_USERNAME:resolveiq_app}
+    password: ${DATABASE_PASSWORD:resolveiq_secret}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      pool-name: ResolveIQProcessorsPool
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 500
+    producer:
+      acks: all
+      retries: 3
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+resolveiq:
+  kafka:
+    topics:
+      metrics: telemetry.metrics
+      logs: telemetry.logs
+      traces: telemetry.traces
+    consumer:
+      metrics-group: resolveiq-metrics-processor
+      logs-group: resolveiq-logs-processor
+      traces-group: resolveiq-traces-processor
+  processors:
+    watermark:
+      allowed-lateness-seconds: 60
+  opensearch:
+    uris: ${OPENSEARCH_URIS:http://localhost:9200}
+    username: ${OPENSEARCH_USERNAME:admin}
+    password: ${OPENSEARCH_PASSWORD:admin}
+
+logging:
+  level:
+    com.resolveiq.processors: INFO
+    org.apache.kafka: WARN

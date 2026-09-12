@@ -2,8 +2,8 @@ package com.resolveiq.ingestion.grpc;
 
 import com.resolveiq.common.tenant.TenantContext;
 import com.resolveiq.ingestion.kafka.TelemetryKafkaProducer;
-import com.resolveiq.ingestion.model.KafkaEventEnvelope;
-import com.resolveiq.ingestion.model.LogObservedPayload;
+import com.resolveiq.common.telemetry.KafkaEventEnvelope;
+import com.resolveiq.common.telemetry.LogObservedPayload;
 import com.resolveiq.ingestion.security.IngestionCredentialValidator;
 import io.grpc.*;
 import jakarta.annotation.PostConstruct;

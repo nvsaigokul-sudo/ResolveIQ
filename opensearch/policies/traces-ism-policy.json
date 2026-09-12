@@ -1,0 +1,42 @@
+{
+  "policy": {
+    "description": "ResolveIQ Traces Retention ISM Policy (PRD §13.3, §37): 7 days retention, then delete.",
+    "default_state": "hot",
+    "states": [
+      {
+        "name": "hot",
+        "actions": [
+          {
+            "rollover": {
+              "min_index_age": "1d",
+              "min_primary_shard_size": "30gb"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "state_name": "delete",
+            "conditions": {
+              "min_index_age": "7d"
+            }
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "actions": [
+          {
+            "delete": {}
+          }
+        ],
+        "transitions": []
+      }
+    ],
+    "ism_template": [
+      {
+        "index_patterns": ["resolveiq-traces-*"],
+        "priority": 100
+      }
+    ]
+  }
+}

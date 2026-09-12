@@ -1,5 +1,6 @@
-package com.resolveiq.ingestion.model;
+package com.resolveiq.common.telemetry;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
@@ -11,6 +12,7 @@ import java.util.UUID;
  * Envelope fields: event_id (UUID), tenant_id, project_id, environment, timestamp,
  * correlation_id, schema_version, producer, trace_context, and type-specific payload.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record KafkaEventEnvelope<T>(
         @JsonProperty("event_id") UUID eventId,
         @JsonProperty("tenant_id") UUID tenantId,

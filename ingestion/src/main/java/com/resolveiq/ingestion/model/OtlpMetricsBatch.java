@@ -2,6 +2,7 @@ package com.resolveiq.ingestion.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.resolveiq.common.telemetry.MetricObservedPayload;
 
 import java.util.List;
 import java.util.Map;

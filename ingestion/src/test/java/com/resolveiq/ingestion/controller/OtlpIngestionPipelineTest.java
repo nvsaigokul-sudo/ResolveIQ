@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resolveiq.common.crypto.ApiKeyGenerator;
 import com.resolveiq.common.security.Role;
 import com.resolveiq.ingestion.kafka.TelemetryKafkaProducer;
+import com.resolveiq.common.telemetry.*;
 import com.resolveiq.ingestion.model.*;
 import com.resolveiq.ingestion.security.IngestionCredentialValidator;
 import org.apache.kafka.clients.consumer.Consumer;

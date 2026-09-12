@@ -1,5 +1,6 @@
-package com.resolveiq.ingestion.model;
+package com.resolveiq.common.telemetry;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
@@ -9,6 +10,7 @@ import java.util.Map;
 /**
  * Metric payload conforming to OpenTelemetry canonical data model (PRD Section 13.2).
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record MetricObservedPayload(
         @JsonProperty("metric_name") String metricName,
         @JsonProperty("metric_type") MetricType metricType,

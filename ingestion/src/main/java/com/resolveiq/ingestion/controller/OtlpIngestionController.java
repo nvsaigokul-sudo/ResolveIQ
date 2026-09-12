@@ -8,6 +8,7 @@ import com.resolveiq.common.tenant.TenantContextHolder;
 import com.resolveiq.ingestion.dedup.IdempotencyCache;
 import com.resolveiq.ingestion.exception.PayloadOversizedException;
 import com.resolveiq.ingestion.kafka.TelemetryKafkaProducer;
+import com.resolveiq.common.telemetry.*;
 import com.resolveiq.ingestion.model.*;
 import com.resolveiq.ingestion.ratelimit.TenantRateLimiter;
 import com.resolveiq.ingestion.redaction.TelemetryRedactor;

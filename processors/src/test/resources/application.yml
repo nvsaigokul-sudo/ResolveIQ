@@ -1,0 +1,44 @@
+server:
+  port: -1
+
+spring:
+  application:
+    name: resolveiq-processors-test
+  datasource:
+    url: jdbc:h2:mem:resolveiq_proc_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  flyway:
+    enabled: false
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 100
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+resolveiq:
+  kafka:
+    topics:
+      metrics: telemetry.metrics
+      logs: telemetry.logs
+      traces: telemetry.traces
+    consumer:
+      metrics-group: test-metrics-processor
+      logs-group: test-logs-processor
+      traces-group: test-traces-processor
+  processors:
+    watermark:
+      allowed-lateness-seconds: 60
+
+logging:
+  level:
+    com.resolveiq.processors: DEBUG
+    org.apache.kafka: WARN

@@ -2,7 +2,7 @@ package com.resolveiq.ingestion.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resolveiq.common.exception.ResolveIQException;
-import com.resolveiq.ingestion.model.KafkaEventEnvelope;
+import com.resolveiq.common.telemetry.KafkaEventEnvelope;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.slf4j.Logger;
