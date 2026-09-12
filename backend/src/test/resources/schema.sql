@@ -309,4 +309,50 @@ CREATE TABLE IF NOT EXISTS code_repositories (
     CONSTRAINT uq_code_repos_tenant_repo UNIQUE (tenant_id, provider, repo_name)
 );
 
+CREATE TABLE IF NOT EXISTS evaluation_runs (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    model_identifier VARCHAR(128) NOT NULL,
+    benchmark_suite VARCHAR(128) NOT NULL,
+    total_cases INT NOT NULL DEFAULT 0,
+    passed_cases INT NOT NULL DEFAULT 0,
+    top1_accuracy DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    top3_accuracy DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    evidence_precision DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    evidence_grounding DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    hallucination_rate DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    insufficient_evidence_accuracy DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    completion_rate DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    avg_tool_calls DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    p50_duration_ms BIGINT NOT NULL DEFAULT 0,
+    p95_duration_ms BIGINT NOT NULL DEFAULT 0,
+    total_tokens INT NOT NULL DEFAULT 0,
+    estimated_cost_usd DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    regression_detected BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS evaluation_case_results (
+    id UUID PRIMARY KEY,
+    run_id UUID NOT NULL REFERENCES evaluation_runs(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    scenario_id VARCHAR(128) NOT NULL,
+    scenario_category VARCHAR(64) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'PASSED',
+    expected_service VARCHAR(128),
+    predicted_service VARCHAR(128),
+    top1_match BOOLEAN NOT NULL DEFAULT FALSE,
+    top3_match BOOLEAN NOT NULL DEFAULT FALSE,
+    confidence DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    evidence_grounded BOOLEAN NOT NULL DEFAULT FALSE,
+    hallucination_detected BOOLEAN NOT NULL DEFAULT FALSE,
+    insufficient_evidence_correct BOOLEAN NOT NULL DEFAULT FALSE,
+    tool_calls INT NOT NULL DEFAULT 0,
+    duration_ms BIGINT NOT NULL DEFAULT 0,
+    tokens_used INT NOT NULL DEFAULT 0,
+    failure_reason TEXT,
+    metrics_json TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
 
