@@ -1,0 +1,381 @@
+openapi: 3.0.3
+info:
+  title: ResolveIQ API Specification
+  description: Authoritative REST API for ResolveIQ - Production Incident Intelligence Platform
+  version: 1.0.0
+servers:
+  - url: /api/v1
+    description: Primary API endpoint
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived (~15 min) JWT access token containing tenant_id, user_id, and role claims.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Prefixed API key (riq_live_...) hashed server-side with Argon2id.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - traceId
+          properties:
+            code:
+              type: string
+              example: TENANT_SCOPE_VIOLATION
+            message:
+              type: string
+              example: The requested resource does not belong to the authenticated tenant.
+            traceId:
+              type: string
+              example: b3f198c2-4321-4f9e-9182-90124a9128cf
+            details:
+              type: object
+              additionalProperties: true
+
+    IncidentSummary:
+      type: object
+      required:
+        - id
+        - tenantId
+        - projectId
+        - fingerprint
+        - status
+        - severity
+        - title
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        fingerprint:
+          type: string
+        status:
+          type: string
+          enum: [DETECTED, INVESTIGATING, IDENTIFIED, MITIGATING, MONITORING, RESOLVED, CLOSED]
+        severity:
+          type: string
+          enum: [SEV1, SEV2, SEV3, SEV4]
+        title:
+          type: string
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    InvestigationResponse:
+      type: object
+      required:
+        - id
+        - incidentId
+        - status
+        - startedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        incidentId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [IN_PROGRESS, COMPLETED, INSUFFICIENT_EVIDENCE, FAILED, TIMED_OUT, AI_UNAVAILABLE]
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        modelUsed:
+          type: string
+        totalTokens:
+          type: integer
+        cost:
+          type: number
+        structuredRca:
+          $ref: '#/components/schemas/StructuredRCA'
+
+    StructuredRCA:
+      type: object
+      required:
+        - summary
+        - impact
+        - affectedServices
+        - candidates
+        - uncertaintySummary
+      properties:
+        summary:
+          type: string
+        impact:
+          type: string
+        affectedServices:
+          type: array
+          items:
+            type: string
+        timelineReference:
+          type: string
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/RootCauseCandidate'
+        recommendedInvestigation:
+          type: array
+          items:
+            type: string
+        recommendedMitigation:
+          type: string
+        historicalSimilarity:
+          type: array
+          items:
+            type: object
+            properties:
+              incidentId:
+                type: string
+              similarityScore:
+                type: number
+        evidenceReferences:
+          type: array
+          items:
+            type: string
+        uncertaintySummary:
+          type: string
+
+    RootCauseCandidate:
+      type: object
+      required:
+        - hypothesis
+        - confidence
+        - supportingEvidenceIds
+        - counterEvidenceIds
+        - reasoning
+      properties:
+        hypothesis:
+          type: string
+        confidence:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        supportingEvidenceIds:
+          type: array
+          items:
+            type: string
+        counterEvidenceIds:
+          type: array
+          items:
+            type: string
+        reasoning:
+          type: string
+        relatedServices:
+          type: array
+          items:
+            type: string
+        relevantEvents:
+          type: array
+          items:
+            type: string
+        humanVerificationStatus:
+          type: string
+          enum: [UNVERIFIED, VERIFIED, REJECTED, NEEDS_MORE_EVIDENCE]
+          default: UNVERIFIED
+
+    ApiKeyCreationRequest:
+      type: object
+      required:
+        - name
+        - scopes
+      properties:
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+
+    ApiKeyResponse:
+      type: object
+      required:
+        - id
+        - name
+        - keyPrefix
+        - secretKey
+        - scopes
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        keyPrefix:
+          type: string
+        secretKey:
+          type: string
+          description: Plaintext key shown once upon creation (riq_live_...)
+        scopes:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+paths:
+  /incidents:
+    get:
+      summary: List incidents for the authenticated tenant
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: severity
+          in: query
+          schema:
+            type: string
+        - name: service
+          in: query
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Paginated incident list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IncidentSummary'
+                  nextCursor:
+                    type: string
+                    nullable: true
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /incidents/{id}/investigations:
+    post:
+      summary: Trigger AI root-cause investigation for an incident
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                forceRerun:
+                  type: boolean
+                  default: false
+      responses:
+        '202':
+          description: Investigation accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  investigationId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: IN_PROGRESS
+        '403':
+          description: Forbidden (insufficient role)
+        '404':
+          description: Incident not found
+        '409':
+          description: Investigation already in progress
+        '429':
+          description: Tenant AI concurrency or quota exceeded
+
+  /api-keys:
+    post:
+      summary: Create a new programmatic API key
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreationRequest'
+      responses:
+        '201':
+          description: API key created (secret returned once)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyResponse'
+        '403':
+          description: Forbidden (requires Admin or Owner role)
