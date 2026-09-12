@@ -18,4 +18,8 @@ public record ApiResponse<T>(
     public static <T> ApiResponse<T> ofData(T data) {
         return new ApiResponse<>(null, data, null, null);
     }
+
+    public static <T> ApiResponse<T> ok(T data) {
+        return ofData(data);
+    }
 }

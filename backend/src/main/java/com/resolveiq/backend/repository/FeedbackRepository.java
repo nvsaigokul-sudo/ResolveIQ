@@ -11,5 +11,7 @@ public interface FeedbackRepository extends TenantScopedRepository<FeedbackEntit
 
     List<FeedbackEntity> findByIncidentIdAndTenantIdOrderByCreatedAtDesc(UUID incidentId, UUID tenantId);
 
+    List<FeedbackEntity> findByIncidentIdAndTenantId(UUID incidentId, UUID tenantId);
+
     List<FeedbackEntity> findByCandidateIdAndTenantId(UUID candidateId, UUID tenantId);
 }

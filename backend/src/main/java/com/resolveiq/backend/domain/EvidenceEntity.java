@@ -74,6 +74,16 @@ public class EvidenceEntity extends TenantScopedEntity {
         this.createdAt = Instant.now();
     }
 
+    public EvidenceEntity(UUID tenantId, UUID incidentId, EvidenceSource source, String service,
+                          String payloadSummary, boolean sanitized, String queryUsed,
+                          Double relevanceScore, Double confidence) {
+        this(tenantId, incidentId, source, service, queryUsed != null ? queryUsed : "auto-query",
+                queryUsed != null ? queryUsed : "auto-ref", payloadSummary,
+                relevanceScore != null ? relevanceScore : 1.0,
+                confidence != null ? confidence : 1.0,
+                "SUPPORTING", Instant.now());
+    }
+
     public UUID getId() {
         return id;
     }

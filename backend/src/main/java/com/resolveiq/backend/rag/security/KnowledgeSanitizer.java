@@ -45,6 +45,10 @@ public class KnowledgeSanitizer {
         return result;
     }
 
+    public String sanitizeSnippet(String input) {
+        return sanitize(input);
+    }
+
     /**
      * Encapsulates retrieved knowledge in an inert XML block with system boundary annotations.
      */

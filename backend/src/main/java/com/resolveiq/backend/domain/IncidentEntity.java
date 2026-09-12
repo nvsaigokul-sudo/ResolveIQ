@@ -82,6 +82,22 @@ public class IncidentEntity extends TenantScopedEntity {
         this.updatedAt = Instant.now();
     }
 
+    public IncidentEntity(UUID tenantId, UUID projectId, String fingerprint, String title,
+                          IncidentStatus status, IncidentSeverity severity, String rootService,
+                          String affectedServices, String summary) {
+        super(tenantId);
+        this.projectId = projectId;
+        this.fingerprint = fingerprint;
+        this.title = title;
+        this.status = status != null ? status : IncidentStatus.DETECTED;
+        this.severity = severity != null ? severity : IncidentSeverity.SEV3;
+        this.rootService = rootService;
+        this.affectedServices = affectedServices != null ? affectedServices : "[]";
+        this.resolutionNotes = summary;
+        this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
     public UUID getId() {
         return id;
     }
@@ -175,6 +191,10 @@ public class IncidentEntity extends TenantScopedEntity {
 
     public String getResolutionNotes() {
         return resolutionNotes;
+    }
+
+    public String getSummary() {
+        return resolutionNotes != null && !resolutionNotes.isBlank() ? resolutionNotes : title;
     }
 
     public void setResolutionNotes(String resolutionNotes) {

@@ -12,6 +12,8 @@ public interface EvidenceRepository extends TenantScopedRepository<EvidenceEntit
 
     List<EvidenceEntity> findByIncidentIdAndTenantIdOrderByCreatedAtDesc(UUID incidentId, UUID tenantId);
 
+    List<EvidenceEntity> findByIncidentIdAndTenantId(UUID incidentId, UUID tenantId);
+
     List<EvidenceEntity> findByIncidentIdAndTenantIdAndSource(UUID incidentId, UUID tenantId, EvidenceSource source);
 
     List<EvidenceEntity> findByIncidentIdAndTenantIdAndService(UUID incidentId, UUID tenantId, String service);

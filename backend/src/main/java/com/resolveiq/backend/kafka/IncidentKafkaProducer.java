@@ -11,6 +11,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -69,6 +70,60 @@ public class IncidentKafkaProducer {
                     payload.evidenceId(), payload.incidentId(), payload.tenantId());
         } catch (Exception e) {
             log.warn("Failed to publish EvidenceCollected Kafka event: {}", e.getMessage());
+        }
+    }
+
+    public void publishInvestigationStarted(UUID tenantId, UUID incidentId, UUID investigationId, String rootService) {
+        try {
+            KafkaEventEnvelope<Map<String, Object>> envelope = new KafkaEventEnvelope<>(
+                    UUID.randomUUID(),
+                    tenantId,
+                    null,
+                    "production",
+                    Instant.now(),
+                    "resolveiq-backend",
+                    "1.0",
+                    "investigation-service",
+                    null,
+                    Map.of(
+                            "incidentId", incidentId.toString(),
+                            "investigationId", investigationId.toString(),
+                            "rootService", rootService != null ? rootService : "unknown",
+                            "status", "IN_PROGRESS"
+                    )
+            );
+            String partitionKey = tenantId + ":" + (rootService != null ? rootService : "default");
+            kafkaTemplate.send("investigations", partitionKey, objectMapper.writeValueAsString(envelope));
+            log.info("Published InvestigationStarted event: investigationId={}, incidentId={}", investigationId, incidentId);
+        } catch (Exception e) {
+            log.warn("Failed to publish InvestigationStarted Kafka event: {}", e.getMessage());
+        }
+    }
+
+    public void publishInvestigationCompleted(UUID tenantId, UUID incidentId, UUID investigationId, String status, int candidateCount) {
+        try {
+            KafkaEventEnvelope<Map<String, Object>> envelope = new KafkaEventEnvelope<>(
+                    UUID.randomUUID(),
+                    tenantId,
+                    null,
+                    "production",
+                    Instant.now(),
+                    "resolveiq-backend",
+                    "1.0",
+                    "investigation-service",
+                    null,
+                    Map.of(
+                            "incidentId", incidentId.toString(),
+                            "investigationId", investigationId.toString(),
+                            "status", status,
+                            "candidateCount", candidateCount
+                    )
+            );
+            String partitionKey = tenantId + ":default";
+            kafkaTemplate.send("investigations", partitionKey, objectMapper.writeValueAsString(envelope));
+            log.info("Published InvestigationCompleted event: investigationId={}, incidentId={}, status={}", investigationId, incidentId, status);
+        } catch (Exception e) {
+            log.warn("Failed to publish InvestigationCompleted Kafka event: {}", e.getMessage());
         }
     }
 

@@ -246,3 +246,20 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
     header_path VARCHAR(500),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS deployments (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+    service_id UUID REFERENCES services(id) ON DELETE CASCADE,
+    service_name VARCHAR(255) NOT NULL,
+    environment VARCHAR(100) NOT NULL DEFAULT 'production',
+    version VARCHAR(100) NOT NULL,
+    commit_sha VARCHAR(100) NOT NULL,
+    commit_message TEXT,
+    deployed_by VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'SUCCESS',
+    deployed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    metadata TEXT
+);
+

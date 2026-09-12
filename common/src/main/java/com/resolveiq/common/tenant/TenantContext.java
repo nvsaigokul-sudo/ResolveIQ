@@ -24,6 +24,10 @@ public record TenantContext(
         Objects.requireNonNull(actorType, "actorType cannot be null in TenantContext");
     }
 
+    public TenantContext(UUID tenantId, UUID userId, Role role, ActorType actorType) {
+        this(tenantId, userId, role, actorType, null, null);
+    }
+
     public static TenantContext ofUser(UUID tenantId, UUID userId, Role role, String traceId) {
         return new TenantContext(tenantId, userId, role, ActorType.USER, null, traceId);
     }

@@ -9,6 +9,7 @@ public enum EvidenceSource {
     TRACES,
     DEPLOYMENT,
     CONFIG,
+    TOPOLOGY,
     HISTORY,
     RUNBOOK,
     CODE,
